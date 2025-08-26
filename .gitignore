@@ -1,0 +1,13 @@
+# Node.js
+node_modules/
+dist/
+build/
+
+# Environment variables
+.env
+
+# Local token storage
+youtube_tokens.json
+
+# Large files
+*.mp4

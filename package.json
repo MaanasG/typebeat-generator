@@ -1,0 +1,27 @@
+{
+  "name": "beat-uploader-backend",
+  "version": "1.0.0",
+  "description": "MVP Backend for Beat Video Uploader",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "dependencies": {
+    "axios": "^1.11.0",
+    "cheerio": "^1.1.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.6.1",
+    "express": "^4.18.2",
+    "ffmpeg-static": "^5.2.0",
+    "fluent-ffmpeg": "^2.1.2",
+    "googleapis": "^128.0.0",
+    "multer": "^1.4.5-lts.1",
+    "openai": "^4.20.0",
+    "puppeteer": "^24.16.2",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}

@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  backend:
+    build: .
+    ports:
+      - "3001:3001"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+    env_file:
+      - .env
+    depends_on:
+      - video_service
+  
+  video_service:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./python_service:/app
+    environment:
+      - FLASK_ENV=development
+
+  # Optional: Add Redis for job queuing in production
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"

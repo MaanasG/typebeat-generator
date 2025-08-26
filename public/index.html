@@ -1,0 +1,1243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Beat Video Uploader MVP</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/1.6.0/axios.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        * {
+            font-family: 'JetBrains Mono', monospace;
+        }
+        
+        body, html {
+            overflow: hidden;
+            height: 100vh;
+            margin: 0;
+            padding: 0;
+        }
+        
+        .video-background {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: -1;
+            object-fit: cover;
+        }
+        
+        .floating-form {
+            backdrop-filter: blur(10px);
+            background: rgba(0, 0, 0, 0.15);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 25px 45px rgba(0, 0, 0, 0.3);
+        }
+        
+        .floating-input {
+            backdrop-filter: blur(8px);
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: white;
+            transition: all 0.3s ease;
+        }
+        
+        .floating-input:focus {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.3);
+            outline: none;
+            box-shadow: 0 0 20px rgba(255, 255, 255, 0.1);
+        }
+        
+        .floating-input::placeholder {
+            color: rgba(255, 255, 255, 0.5);
+        }
+        
+        .upload-zone {
+            backdrop-filter: blur(8px);
+            background: rgba(255, 255, 255, 0.05);
+            border: 2px dashed rgba(255, 255, 255, 0.2);
+            transition: all 0.3s ease;
+            color: white;
+        }
+        
+        .upload-zone:hover {
+            border-color: rgba(255, 255, 255, 0.4);
+            background: rgba(255, 255, 255, 0.1);
+        }
+        
+        .upload-zone.dragover {
+            border-color: rgba(255, 255, 255, 0.6);
+            background: rgba(255, 255, 255, 0.15);
+        }
+        
+        .auth-section {
+            backdrop-filter: blur(10px);
+            background: rgba(220, 38, 38, 0.1);
+            border: 1px solid rgba(220, 38, 38, 0.3);
+        }
+        
+        .auth-button {
+            background: rgba(220, 38, 38, 0.8);
+            transition: all 0.3s ease;
+            backdrop-filter: blur(5px);
+        }
+        
+        .auth-button:hover {
+            background: rgba(239, 68, 68, 0.9);
+            box-shadow: 0 10px 30px rgba(220, 38, 38, 0.4);
+        }
+        
+        .submit-button {
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.8), rgba(139, 92, 246, 0.8));
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s ease;
+        }
+        
+        .submit-button:hover:not(:disabled) {
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.9), rgba(139, 92, 246, 0.9));
+            box-shadow: 0 15px 40px rgba(99, 102, 241, 0.3);
+            transform: translateY(-2px);
+        }
+        
+        .submit-button:disabled {
+            background: rgba(75, 85, 99, 0.4);
+            cursor: not-allowed;
+        }
+        
+        .progress-bar {
+            backdrop-filter: blur(10px);
+            background: rgba(255, 255, 255, 0.1);
+        }
+        
+        .progress-fill {
+            background: linear-gradient(90deg, rgba(99, 102, 241, 0.8), rgba(139, 92, 246, 0.8));
+            box-shadow: 0 0 20px rgba(99, 102, 241, 0.5);
+        }
+        
+        .result-display {
+            backdrop-filter: blur(15px);
+            background: rgba(34, 197, 94, 0.1);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+        }
+        
+        .logo-space {
+            height: 80px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 2rem;
+            font-weight: 800;
+            text-shadow: 0 0 20px rgba(255, 255, 255, 0.3);
+            letter-spacing: 0.1em;
+        }
+        
+        .scrollable-content {
+            height: calc(100vh - 140px);
+            overflow-y: auto;
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+        }
+        
+        .scrollable-content::-webkit-scrollbar {
+            display: none;
+        }
+        
+        .tag {
+            backdrop-filter: blur(5px);
+            background: rgba(99, 102, 241, 0.2);
+            border: 1px solid rgba(99, 102, 241, 0.3);
+            color: white;
+        }
+        
+        .error-display {
+            backdrop-filter: blur(10px);
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: white;
+        }
+        
+        .success-display {
+            backdrop-filter: blur(10px);
+            background: rgba(34, 197, 94, 0.1);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+            color: white;
+        }
+        
+        .text-invert {
+            mix-blend-mode: difference;
+            color: white;
+        }
+        
+        .credit-button {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            backdrop-filter: blur(10px);
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            cursor: pointer;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            overflow: hidden;
+            text-decoration: none;
+        }
+        
+        .credit-button::before {
+            content: '';
+            position: absolute;
+            inset: -2px;
+            border-radius: 50%;
+            padding: 2px;
+            background: linear-gradient(45deg, rgba(99, 102, 241, 0.6), rgba(139, 92, 246, 0.6), rgba(236, 72, 153, 0.6));
+            mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            mask-composite: xor;
+            animation: pulse-border 3s ease-in-out infinite;
+            opacity: 0.7;
+        }
+        
+        @keyframes pulse-border {
+            0%, 100% {
+                opacity: 0.4;
+                transform: scale(1);
+            }
+            50% {
+                opacity: 0.8;
+                transform: scale(1.05);
+            }
+        }
+        
+        .credit-button:hover {
+            width: 250px;
+            border-radius: 25px;
+            background: rgba(255, 255, 255, 0.15);
+        }
+        
+        .credit-button:hover::before {
+            border-radius: 25px;
+            animation-play-state: paused;
+            opacity: 0.9;
+        }
+        
+        .credit-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            object-fit: cover;
+            transition: all 0.4s ease;
+            flex-shrink: 0;
+        }
+        
+        .credit-text {
+            opacity: 0;
+            margin-left: 0;
+            width: 0;
+            font-weight: 600;
+            font-size: 14px;
+            color: white;
+            white-space: nowrap;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            overflow: hidden;
+        }
+        
+        .credit-button:hover .credit-text {
+            opacity: 1;
+            margin-left: 10px;
+            width: 100px;
+        }
+        
+        /* Modal/Popup Styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(10px);
+            z-index: 2000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            animation: fadeIn 0.3s ease-out;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        @keyframes slideIn {
+            from { 
+                opacity: 0; 
+                transform: translateY(-30px) scale(0.95); 
+            }
+            to { 
+                opacity: 1; 
+                transform: translateY(0) scale(1); 
+            }
+        }
+        
+        .modal-content {
+            backdrop-filter: blur(15px);
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5);
+            border-radius: 20px;
+            padding: 32px;
+            max-width: 500px;
+            width: 90%;
+            animation: slideIn 0.3s ease-out;
+        }
+        
+        .modal-input {
+            backdrop-filter: blur(8px);
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            color: white;
+            transition: all 0.3s ease;
+        }
+        
+        .modal-input:focus {
+            background: rgba(255, 255, 255, 0.12);
+            border-color: rgba(99, 102, 241, 0.5);
+            outline: none;
+            box-shadow: 0 0 20px rgba(99, 102, 241, 0.2);
+        }
+        
+        .modal-input::placeholder {
+            color: rgba(255, 255, 255, 0.4);
+        }
+        
+        .modal-button {
+            backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+        }
+        
+        .modal-button-primary {
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.8), rgba(139, 92, 246, 0.8));
+            border: 1px solid rgba(99, 102, 241, 0.3);
+        }
+        
+        .modal-button-primary:hover {
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.9), rgba(139, 92, 246, 0.9));
+            box-shadow: 0 10px 30px rgba(99, 102, 241, 0.4);
+        }
+        
+        .modal-button-secondary {
+            background: rgba(75, 85, 99, 0.6);
+            border: 1px solid rgba(75, 85, 99, 0.3);
+        }
+        
+        .modal-button-secondary:hover {
+            background: rgba(75, 85, 99, 0.8);
+        }
+        
+        .warning-display {
+            backdrop-filter: blur(10px);
+            background: rgba(251, 146, 60, 0.1);
+            border: 1px solid rgba(251, 146, 60, 0.3);
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <!-- Video Background -->
+    
+    <!-- <video autoplay muted loop class="video-background">
+        <source src="fazobackground.mp4" type="video/mp4">
+        <div class="fixed inset-0 bg-gradient-to-br from-gray-900 via-purple-900 to-indigo-900"></div>
+    </video> -->
+    
+    <video id="background-video" autoplay muted loop class="video-background">
+        <source type="video/mp4">
+    </video>
+
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useRef, useCallback, useEffect } = React;
+
+        const API_BASE = '/api';
+
+        // BPM/Key Input Modal Component
+        const BpmKeyModal = ({ isOpen, onClose, onSubmit, initialBpm = '', initialKey = '', beatstarsLink = '' }) => {
+            const [bpm, setBpm] = useState(initialBpm);
+            const [key, setKey] = useState(initialKey);
+            const [isChecking, setIsChecking] = useState(false);
+            
+            useEffect(() => {
+                if (isOpen && beatstarsLink && !initialBpm && !initialKey) {
+                    checkBeatStarsData();
+                }
+            }, [isOpen, beatstarsLink]);
+            
+            const checkBeatStarsData = async () => {
+                setIsChecking(true);
+                try {
+                    const response = await fetch(`${API_BASE}/check-beatstars-data`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ beatstarsLink }),
+                    });
+                    
+                    const result = await response.json();
+                    if (result.success && result.data) {
+                        if (result.data.bpm) setBpm(result.data.bpm.toString());
+                        if (result.data.key) setKey(result.data.key);
+                    }
+                } catch (error) {
+                    console.error('Error checking BeatStars data:', error);
+                } finally {
+                    setIsChecking(false);
+                }
+            };
+
+            const handleSubmit = () => {
+                onSubmit({ bpm: bpm ? parseInt(bpm) : null, key: key || null });
+                onClose();
+            };
+
+            const handleSkip = () => {
+                onSubmit({ bpm: null, key: null });
+                onClose();
+            };
+
+            if (!isOpen) return null;
+
+            return (
+                <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
+                    <div className="modal-content">
+                        <div className="text-center mb-6">
+                            <div className="text-4xl mb-4">🎵</div>
+                            <h2 className="text-2xl font-bold text-white uppercase tracking-wide mb-2">
+                                Beat Information
+                            </h2>
+                            <p className="text-white/70 text-sm uppercase tracking-wide">
+                                {isChecking ? 'Checking BeatStars...' : 'Auto-scraping failed, please enter manually'}
+                            </p>
+                        </div>
+
+                        {isChecking ? (
+                            <div className="text-center py-8">
+                                <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+                                <p className="text-white/70 mt-4">Attempting to get data from BeatStars...</p>
+                            </div>
+                        ) : (
+                            <>
+                                <div className="space-y-6">
+                                    <div>
+                                        <label className="block text-sm font-semibold text-white mb-3 uppercase tracking-wide">
+                                            BPM (Beats Per Minute)
+                                        </label>
+                                        <input
+                                            type="number"
+                                            value={bpm}
+                                            onChange={(e) => setBpm(e.target.value)}
+                                            placeholder="e.g. 140"
+                                            min="60"
+                                            max="200"
+                                            className="modal-input w-full px-4 py-3 rounded-xl font-mono"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-semibold text-white mb-3 uppercase tracking-wide">
+                                            Key / Scale
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={key}
+                                            onChange={(e) => setKey(e.target.value)}
+                                            placeholder="e.g. C Major, Am, F#"
+                                            className="modal-input w-full px-4 py-3 rounded-xl font-mono"
+                                        />
+                                        <p className="text-white/50 text-xs mt-2 uppercase tracking-wide">
+                                            Examples: C Major, A Minor, F# Minor, Bb
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="warning-display rounded-xl p-4 my-6">
+                                    <div className="flex items-start">
+                                        <div className="text-2xl mr-3">⚠️</div>
+                                        <div>
+                                            <p className="font-semibold text-sm uppercase tracking-wide mb-2">
+                                                Auto-scraping failed
+                                            </p>
+                                            <p className="text-xs text-white/80">
+                                                We couldn't automatically get the BPM and Key from your BeatStars link. 
+                                                You can enter them manually or skip to use "Not Found" in the description.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="flex gap-4">
+                                    <button
+                                        onClick={handleSkip}
+                                        className="modal-button modal-button-secondary flex-1 py-3 px-6 rounded-xl font-bold text-white uppercase tracking-wide"
+                                    >
+                                        Skip
+                                    </button>
+                                    <button
+                                        onClick={handleSubmit}
+                                        className="modal-button modal-button-primary flex-1 py-3 px-6 rounded-xl font-bold text-white uppercase tracking-wide"
+                                    >
+                                        Continue
+                                    </button>
+                                </div>
+
+                                <div className="text-center mt-4">
+                                    <button
+                                        onClick={onClose}
+                                        className="text-white/50 hover:text-white/80 text-sm uppercase tracking-wide"
+                                    >
+                                        Cancel Upload
+                                    </button>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        const BeatUploaderApp = () => {
+            const [formData, setFormData] = useState({
+                beatFile: null,
+                coverImage: null,
+                beatTitle: '',
+                typeBeartArtists: '',
+                instagramLink: '',
+                beatstarsLink: '',
+                genre: 'hip-hop'
+            });
+
+            const [isMuted, setIsMuted] = React.useState(true);
+            React.useEffect(() => {
+                const videoElement = document.getElementById("background-video");
+                if (videoElement) {
+                    videoElement.muted = isMuted;
+                }
+            }, [isMuted]);
+            
+            const [isProcessing, setIsProcessing] = useState(false);
+            const [progress, setProgress] = useState({
+                step: '',
+                percentage: 0
+            });
+            const [result, setResult] = useState(null);
+            const [errors, setErrors] = useState({});
+            const [isYouTubeAuthenticated, setIsYouTubeAuthenticated] = useState(false);
+            const [authenticationStatus, setAuthenticationStatus] = useState('checking');
+            
+            // BPM/Key Modal states
+            const [showBpmKeyModal, setShowBpmKeyModal] = useState(false);
+            const [manualBpmKey, setManualBpmKey] = useState({ bpm: null, key: null });
+            const [pendingSubmission, setPendingSubmission] = useState(null);
+
+            const beatFileRef = useRef();
+            const coverImageRef = useRef();
+
+            useEffect(() => {
+                const urlParams = new URLSearchParams(window.location.search);
+                const authSuccess = urlParams.get('auth_success');
+                const authError = urlParams.get('auth_error');
+                
+                if (authSuccess) {
+                    setIsYouTubeAuthenticated(true);
+                    setAuthenticationStatus('authenticated');
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                } else if (authError) {
+                    setErrors(prev => ({ ...prev, auth: decodeURIComponent(authError) }));
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                } else {
+                    checkAuthenticationStatus();
+                }
+            }, []);
+
+            const checkAuthenticationStatus = async () => {
+                try {
+                    setAuthenticationStatus('not_authenticated');
+                } catch (error) {
+                    console.error('Error checking auth status:', error);
+                    setAuthenticationStatus('not_authenticated');
+                }
+            };
+
+            const authenticateYouTube = async () => {
+                try {
+                    setErrors(prev => ({ ...prev, auth: null }));
+                    
+                    const response = await fetch(`${API_BASE}/auth/youtube`);
+                    const data = await response.json();
+                    
+                    if (!data.authUrl) {
+                        throw new Error('Failed to get authentication URL');
+                    }
+                    
+                    window.location.href = data.authUrl;
+                    
+                } catch (error) {
+                    console.error('Auth error:', error);
+                    setErrors(prev => ({ ...prev, auth: 'Failed to authenticate with YouTube: ' + error.message }));
+                }
+            };
+
+            const handleFileChange = (field, file) => {
+                setFormData(prev => ({ ...prev, [field]: file }));
+                setErrors(prev => ({ ...prev, [field]: null }));
+            };
+
+            const handleInputChange = (field, value) => {
+                setFormData(prev => ({ ...prev, [field]: value }));
+            };
+
+            const validateForm = () => {
+                const newErrors = {};
+                
+                if (!formData.beatFile) {
+                    newErrors.beatFile = 'Beat file is required';
+                }
+                if (!formData.coverImage) {
+                    newErrors.coverImage = 'Cover image is required';
+                }
+                if (!formData.beatTitle.trim()) {
+                    newErrors.beatTitle = 'Beat title is required';
+                }
+                if (!formData.typeBeartArtists.trim()) {
+                    newErrors.typeBeartArtists = 'Type beat artists are required';
+                }
+                if (!isYouTubeAuthenticated) {
+                    newErrors.auth = 'Please authenticate with YouTube first';
+                }
+
+                setErrors(newErrors);
+                return Object.keys(newErrors).length === 0;
+            };
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                
+                if (!validateForm()) {
+                    return;
+                }
+
+                // Check if we need BPM/Key data and BeatStars link exists
+                if (formData.beatstarsLink && !manualBpmKey.bpm && !manualBpmKey.key) {
+                    // First try to auto-scrape, if it fails, show modal
+                    try {
+                        setProgress({ step: 'CHECKING BEATSTARS DATA...', percentage: 5 });
+                        
+                        const response = await fetch(`${API_BASE}/check-beatstars-data`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({ beatstarsLink: formData.beatstarsLink }),
+                        });
+                        
+                        const result = await response.json();
+                        
+                        if (result.scrapingFailed) {
+                            // Scraping failed, show modal for manual input
+                            setPendingSubmission(e);
+                            setProgress({ step: '', percentage: 0 });
+                            setShowBpmKeyModal(true);
+                            return;
+                        } else if (result.data) {
+                            // Auto-scraping succeeded, use the data
+                            setManualBpmKey(result.data);
+                        }
+                        
+                    } catch (error) {
+                        console.error('Error checking BeatStars:', error);
+                        // On error, show modal for manual input
+                        setPendingSubmission(e);
+                        setProgress({ step: '', percentage: 0 });
+                        setShowBpmKeyModal(true);
+                        return;
+                    }
+                }
+
+                // Proceed with upload
+                await performUpload();
+            };
+
+            const performUpload = async () => {
+                setIsProcessing(true);
+                setResult(null);
+                setErrors({});
+
+                try {
+                    const formDataObj = new FormData();
+                    formDataObj.append('beatFile', formData.beatFile);
+                    formDataObj.append('coverImage', formData.coverImage);
+                    formDataObj.append('beatTitle', formData.beatTitle);
+                    formDataObj.append('typeBeartArtists', formData.typeBeartArtists);
+                    formDataObj.append('instagramLink', formData.instagramLink);
+                    formDataObj.append('beatstarsLink', formData.beatstarsLink);
+                    formDataObj.append('genre', formData.genre);
+                    
+                    // Add manual BPM/Key if provided
+                    if (manualBpmKey.bpm) {
+                        formDataObj.append('manualBpm', manualBpmKey.bpm.toString());
+                    }
+                    if (manualBpmKey.key) {
+                        formDataObj.append('manualKey', manualBpmKey.key);
+                    }
+
+                    setProgress({ step: 'UPLOADING FILES...', percentage: 10 });
+
+                    const response = await fetch(`${API_BASE}/upload-beat`, {
+                        method: 'POST',
+                        body: formDataObj
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                    }
+
+                    setProgress({ step: 'PROCESSING RESPONSE...', percentage: 90 });
+
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        setProgress({ step: 'COMPLETE!', percentage: 100 });
+                        setResult(result.result);
+                    } else {
+                        throw new Error(result.error || 'Upload failed');
+                    }
+                    
+                } catch (error) {
+                    console.error('Upload failed:', error);
+                    setErrors({ submit: error.message || 'Upload failed. Please try again.' });
+                    setProgress({ step: '', percentage: 0 });
+                } finally {
+                    setIsProcessing(false);
+                }
+            };
+
+            const handleBpmKeySubmit = ({ bpm, key }) => {
+                setManualBpmKey({ bpm, key });
+                setShowBpmKeyModal(false);
+                setPendingSubmission(null);
+                
+                // Continue with upload
+                setTimeout(() => {
+                    performUpload();
+                }, 100);
+            };
+
+            const handleBpmKeyModalClose = () => {
+                setShowBpmKeyModal(false);
+                setPendingSubmission(null);
+                setProgress({ step: '', percentage: 0 });
+            };
+
+            const FileUploadZone = ({ 
+                label, 
+                accept, 
+                file, 
+                onFileChange, 
+                error,
+                fileInputRef 
+            }) => {
+                const [dragOver, setDragOver] = useState(false);
+
+                const handleDragOver = useCallback((e) => {
+                    e.preventDefault();
+                    setDragOver(true);
+                }, []);
+
+                const handleDragLeave = useCallback((e) => {
+                    e.preventDefault();
+                    setDragOver(false);
+                }, []);
+
+                const handleDrop = useCallback((e) => {
+                    e.preventDefault();
+                    setDragOver(false);
+                    const files = e.dataTransfer.files;
+                    if (files.length > 0) {
+                        onFileChange(files[0]);
+                    }
+                }, [onFileChange]);
+
+                const handleFileSelect = (e) => {
+                    const selectedFile = e.target.files[0];
+                    if (selectedFile) {
+                        onFileChange(selectedFile);
+                    }
+                };
+
+                return (
+                    <div className="mb-6">
+                        <label className="block text-sm font-semibold text-white mb-3 uppercase tracking-wide">
+                            {label}
+                        </label>
+                        <div
+                            className={`upload-zone ${dragOver ? 'dragover' : ''} rounded-xl p-8 text-center cursor-pointer`}
+                            onDragOver={handleDragOver}
+                            onDragLeave={handleDragLeave}
+                            onDrop={handleDrop}
+                            onClick={() => fileInputRef.current?.click()}
+                        >
+                            <input
+                                type="file"
+                                accept={accept}
+                                onChange={handleFileSelect}
+                                ref={fileInputRef}
+                                className="hidden"
+                            />
+                            {file ? (
+                                <div className="text-green-400">
+                                    <div className="text-3xl mb-3">✓</div>
+                                    <div className="font-semibold text-lg">{file.name}</div>
+                                    <div className="text-sm text-white/70 mt-2">
+                                        {(file.size / 1024 / 1024).toFixed(2)} MB
+                                    </div>
+                                </div>
+                            ) : (
+                                <div>
+                                    <div className="text-4xl mb-4">⬆</div>
+                                    <div className="font-semibold text-lg mb-2">
+                                        DRAG & DROP OR CLICK
+                                    </div>
+                                    <div className="text-sm text-white/60 uppercase tracking-wide">
+                                        {accept}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                        {error && (
+                            <div className="mt-3 p-3 error-display rounded-lg">
+                                <p className="text-sm font-medium">{error}</p>
+                            </div>
+                        )}
+                    </div>
+                );
+            };
+
+            const ProgressBar = ({ step, percentage }) => (
+                <div className="mb-8">
+                    <div className="flex justify-between mb-4">
+                        <span className="text-lg font-bold text-white uppercase tracking-wider">{step}</span>
+                        <span className="text-lg font-bold text-white">{Math.round(percentage)}%</span>
+                    </div>
+                    <div className="progress-bar rounded-full h-3">
+                        <div 
+                            className="progress-fill h-3 rounded-full transition-all duration-500 ease-out"
+                            style={{ width: `${percentage}%` }}
+                        ></div>
+                    </div>
+                </div>
+            );
+
+            const YouTubeAuthSection = () => (
+                <div className="auth-section rounded-xl p-6 mb-8">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center">
+                            <div className="text-3xl mr-4">📺</div>
+                            <div>
+                                <h3 className="font-bold text-xl text-white uppercase tracking-wide">
+                                    YOUTUBE AUTH
+                                </h3>
+                                <p className="text-white/70 text-sm mt-1 uppercase tracking-wide">
+                                    {isYouTubeAuthenticated ? 
+                                        'CONNECTED - READY TO UPLOAD' :
+                                        'CONNECT YOUR YOUTUBE ACCOUNT'
+                                    }
+                                </p>
+                            </div>
+                        </div>
+                        <div className="flex items-center">
+                            {isYouTubeAuthenticated ? (
+                                <div className="flex items-center text-green-400 font-bold text-lg">
+                                    <div className="text-2xl mr-3">✓</div>
+                                    CONNECTED
+                                </div>
+                            ) : (
+                                <button
+                                    onClick={authenticateYouTube}
+                                    className="auth-button text-white px-6 py-3 rounded-lg font-bold uppercase tracking-wide"
+                                >
+                                    CONNECT
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                    
+                    {errors.auth && (
+                        <div className="mt-4 p-4 error-display rounded-lg">
+                            <p className="text-sm font-medium">{errors.auth}</p>
+                        </div>
+                    )}
+                </div>
+            );
+
+            const ResultDisplay = ({ result }) => (
+                <div className="success-display rounded-xl p-8">
+                    <div className="flex items-center mb-6">
+                        <div className="text-3xl text-green-400 mr-4">✓</div>
+                        <h3 className="text-2xl font-bold text-white uppercase tracking-wide">
+                            UPLOAD COMPLETE
+                        </h3>
+                    </div>
+                    
+                    <div className="space-y-6">
+                        <div>
+                            <label className="text-sm font-bold text-white/80 uppercase tracking-wide">YouTube URL:</label>
+                            <a 
+                                href={result.youtubeUrl} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="block text-indigo-300 hover:text-indigo-100 underline break-all mt-2 font-mono"
+                            >
+                                {result.youtubeUrl}
+                            </a>
+                        </div>
+                        
+                        <div>
+                            <label className="text-sm font-bold text-white/80 uppercase tracking-wide">Generated Title:</label>
+                            <div className="floating-input p-3 rounded-lg mt-2 font-mono">{result.title}</div>
+                        </div>
+                        
+                        <div>
+                            <label className="text-sm font-bold text-white/80 uppercase tracking-wide">Generated Description:</label>
+                            <pre className="floating-input p-3 rounded-lg mt-2 text-sm whitespace-pre-wrap font-mono">
+                                {result.description}
+                            </pre>
+                        </div>
+                        
+                        <div>
+                            <label className="text-sm font-bold text-white/80 uppercase tracking-wide">Generated Tags:</label>
+                            <div className="flex flex-wrap gap-2 mt-3">
+                                {result.tags && result.tags.map((tag, index) => (
+                                    <span 
+                                        key={index}
+                                        className="tag px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wide"
+                                    >
+                                        {tag}
+                                    </span>
+                                ))}
+                            </div>
+                        </div>
+                        
+                        <div className="pt-4">
+                            <a 
+                                href={result.youtubeUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="auth-button text-white px-8 py-4 rounded-lg font-bold uppercase tracking-wide inline-block"
+                            >
+                                VIEW ON YOUTUBE
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            );
+
+            return (
+                <div className="min-h-screen relative">
+                    {/* Credit Button */}
+                    <a 
+                        href="https://linktr.ee/1mains" 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="credit-button"
+                    >
+                        <img 
+                            src="mainslogo.jpg" 
+                            alt="Mains" 
+                            className="credit-avatar"
+                        />
+                        <span className="credit-text">fw 1mains</span>
+                    </a>
+                   
+                   
+                    {/* Mute Toggle Button */}
+                    <button
+                        id="mute-toggle"
+                        className="credit-button"
+                        style={{ top: "80px", position: "absolute" }}
+                        onClick={() => setIsMuted(prev => !prev)}
+                        title={isMuted ? "Unmute" : "Mute"} // ← Tooltip text
+                    >
+                        {isMuted ? "🔇" : "🔊"}
+                    </button>
+                    
+                    {/* BPM/Key Modal */}
+                    <BpmKeyModal
+                        isOpen={showBpmKeyModal}
+                        onClose={handleBpmKeyModalClose}
+                        onSubmit={handleBpmKeySubmit}
+                        beatstarsLink={formData.beatstarsLink}
+                        initialBpm={manualBpmKey.bpm?.toString() || ''}
+                        initialKey={manualBpmKey.key || ''}
+                    />
+
+                    <div className="container mx-auto px-6 py-8 h-screen flex flex-col">
+                        {/* Logo Space */}
+                        <div className="logo-space">
+                            [ TYPE BEAT VIDEO GENERATOR ]
+                        </div>
+
+                        <div className="scrollable-content">
+                            <div className="max-w-4xl mx-auto">
+                                <YouTubeAuthSection />
+
+                                <div className="floating-form rounded-2xl p-8">
+                                    {!isProcessing && !result && (
+                                        <form onSubmit={handleSubmit}>
+                                            <div className="grid lg:grid-cols-2 gap-8 mb-8">
+                                                <FileUploadZone
+                                                    label="Beat Audio File"
+                                                    accept=".mp3,.wav,.flac,.m4a"
+                                                    file={formData.beatFile}
+                                                    onFileChange={(file) => handleFileChange('beatFile', file)}
+                                                    error={errors.beatFile}
+                                                    fileInputRef={beatFileRef}
+                                                />
+
+                                                <FileUploadZone
+                                                    label="Cover Art Image"
+                                                    accept=".jpg,.jpeg,.png"
+                                                    file={formData.coverImage}
+                                                    onFileChange={(file) => handleFileChange('coverImage', file)}
+                                                    error={errors.coverImage}
+                                                    fileInputRef={coverImageRef}
+                                                />
+                                            </div>
+
+                                            <div className="grid lg:grid-cols-2 gap-6 mb-6">
+                                                <div>
+                                                    <label className="block text-sm font-semibold text-white mb-3 uppercase tracking-wide">
+                                                        Beat Title *
+                                                    </label>
+                                                    <input
+                                                        type="text"
+                                                        value={formData.beatTitle}
+                                                        onChange={(e) => handleInputChange('beatTitle', e.target.value)}
+                                                        placeholder="MIDNIGHT VIBES"
+                                                        className="floating-input w-full px-4 py-3 rounded-xl font-mono"
+                                                    />
+                                                    {errors.beatTitle && (
+                                                        <div className="mt-2 p-2 error-display rounded text-sm">
+                                                            {errors.beatTitle}
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                <div>
+                                                    <label className="block text-sm font-semibold text-white mb-3 uppercase tracking-wide">
+                                                        Type Beat Artists *
+                                                    </label>
+                                                    <input
+                                                        type="text"
+                                                        value={formData.typeBeartArtists}
+                                                        onChange={(e) => handleInputChange('typeBeartArtists', e.target.value)}
+                                                        placeholder="DRAKE X TRAVIS SCOTT"
+                                                        className="floating-input w-full px-4 py-3 rounded-xl font-mono"
+                                                    />
+                                                    {errors.typeBeartArtists && (
+                                                        <div className="mt-2 p-2 error-display rounded text-sm">
+                                                            {errors.typeBeartArtists}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            <div className="grid lg:grid-cols-3 gap-6 mb-8">
+                                                <div>
+                                                    <label className="block text-sm font-semibold text-white mb-3 uppercase tracking-wide">
+                                                        Genre
+                                                    </label>
+                                                    <select
+                                                        value={formData.genre}
+                                                        onChange={(e) => handleInputChange('genre', e.target.value)}
+                                                        className="floating-input w-full px-4 py-3 rounded-xl font-mono"
+                                                    >
+                                                        <option value="hip-hop">HIP HOP</option>
+                                                        <option value="trap">TRAP</option>
+                                                        <option value="drill">DRILL</option>
+                                                        <option value="r&b">R&B</option>
+                                                        <option value="pop">POP</option>
+                                                        <option value="afrobeat">AFROBEAT</option>
+                                                    </select>
+                                                </div>
+
+                                                <div>
+                                                    <label className="block text-sm font-semibold text-white mb-3 uppercase tracking-wide">
+                                                        Instagram
+                                                    </label>
+                                                    <input
+                                                        type="url"
+                                                        value={formData.instagramLink}
+                                                        onChange={(e) => handleInputChange('instagramLink', e.target.value)}
+                                                        placeholder="@YOURPROFILE"
+                                                        className="floating-input w-full px-4 py-3 rounded-xl font-mono"
+                                                    />
+                                                </div>
+
+                                                <div>
+                                                    <label className="block text-sm font-semibold text-white mb-3 uppercase tracking-wide">
+                                                        BeatStars
+                                                    </label>
+                                                    <input
+                                                        type="url"
+                                                        value={formData.beatstarsLink}
+                                                        onChange={(e) => handleInputChange('beatstarsLink', e.target.value)}
+                                                        placeholder="BEATSTARS.COM/BEAT"
+                                                        className="floating-input w-full px-4 py-3 rounded-xl font-mono"
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            {/* Manual BPM/Key Display */}
+                                            {(manualBpmKey.bpm || manualBpmKey.key) && (
+                                                <div className="mb-6 success-display rounded-xl p-4">
+                                                    <div className="flex items-center justify-between">
+                                                        <div>
+                                                            <h4 className="font-semibold text-white uppercase tracking-wide mb-2">
+                                                                Manual Beat Info
+                                                            </h4>
+                                                            <div className="flex gap-4 text-sm">
+                                                                {manualBpmKey.bpm && (
+                                                                    <span className="text-white/80">
+                                                                        BPM: <strong>{manualBpmKey.bpm}</strong>
+                                                                    </span>
+                                                                )}
+                                                                {manualBpmKey.key && (
+                                                                    <span className="text-white/80">
+                                                                        Key: <strong>{manualBpmKey.key}</strong>
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setShowBpmKeyModal(true)}
+                                                            className="text-white/60 hover:text-white text-sm underline"
+                                                        >
+                                                            Edit
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {errors.submit && (
+                                                <div className="mb-6 p-4 error-display rounded-lg">
+                                                    <p className="font-medium">{errors.submit}</p>
+                                                </div>
+                                            )}
+
+                                            <button
+                                                type="submit"
+                                                disabled={!isYouTubeAuthenticated}
+                                                className="submit-button w-full py-4 px-8 rounded-xl font-bold text-white uppercase tracking-wider text-lg"
+                                            >
+                                                {isYouTubeAuthenticated ? 'GENERATE & UPLOAD' : 'AUTHENTICATE FIRST'}
+                                            </button>
+                                        </form>
+                                    )}
+
+                                    {isProcessing && (
+                                        <div className="text-center py-12">
+                                            <div className="text-6xl mb-8">⚡</div>
+                                            <h2 className="text-3xl font-bold text-white mb-8 uppercase tracking-wide">
+                                                PROCESSING BEAT
+                                            </h2>
+                                            <ProgressBar step={progress.step} percentage={progress.percentage} />
+                                            <p className="text-white/70 text-sm uppercase tracking-wide">
+                                                DO NOT CLOSE THIS WINDOW
+                                            </p>
+                                        </div>
+                                    )}
+
+                                    {result && (
+                                        <>
+                                            <ResultDisplay result={result} />
+                                            <button
+                                                onClick={() => {
+                                                    setResult(null);
+                                                    setFormData({
+                                                        beatFile: null,
+                                                        coverImage: null,
+                                                        beatTitle: '',
+                                                        typeBeartArtists: '',
+                                                        instagramLink: '',
+                                                        beatstarsLink: '',
+                                                        genre: 'hip-hop'
+                                                    });
+                                                    setManualBpmKey({ bpm: null, key: null });
+                                                    setProgress({ step: '', percentage: 0 });
+                                                    setErrors({});
+                                                }}
+                                                className="w-full mt-8 bg-gray-600/50 backdrop-blur-10 text-white py-4 px-8 rounded-xl font-bold hover:bg-gray-500/60 transition-all duration-300 uppercase tracking-wide"
+                                            >
+                                                UPLOAD ANOTHER BEAT
+                                            </button>
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        ReactDOM.render(<BeatUploaderApp />, document.getElementById('root'));
+    </script>
+    <script>
+    document.addEventListener("DOMContentLoaded", () => {
+        // List all your background videos here
+        const videos = [
+            "background videos/iayze - Elon.mp4",
+            "background videos/Kankan - Nun To Me.mp4",
+            "background videos/Slump6s - Jabawockeez ft. sgpwes.mp4",
+            "background videos/ericdoa - kickstand",
+            "background videos/nettspend - 2024 freestyle.mp4",
+            "background videos/heena - jimmy chuu.mp4",
+            "background videos/tana - kount bana.mp4",
+            "background videos/tana - prolly.mp4",
+            "background videos/xhuloo - suburban.mp4"
+
+            // Add as many as you have
+        ];
+
+        // Pick a random video
+        const randomVideo = videos[Math.floor(Math.random() * videos.length)];
+
+        // Set it as the source
+        const videoElement = document.getElementById("background-video");
+        const sourceElement = videoElement.querySelector("source");
+        sourceElement.src = randomVideo;
+        videoElement.load();
+        videoElement.play();
+        });
+
+
+</script>
+</body>
+</html>
