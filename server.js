@@ -234,7 +234,6 @@ app.get('/api/test-config', (req, res) => {
   res.json({
     status: 'Server running',
     config: {
-      openai: process.env.OPENAI_API_KEY ? 'Set' : 'Missing',
       youtube_client_id: process.env.YOUTUBE_CLIENT_ID ? 'Set' : 'Missing',
       youtube_client_secret: process.env.YOUTUBE_CLIENT_SECRET ? 'Set' : 'Missing',
       youtube_redirect_uri: process.env.YOUTUBE_REDIRECT_URI
