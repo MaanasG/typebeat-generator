@@ -1119,7 +1119,7 @@
                                                         type="text"
                                                         value={formData.typeBeartArtists}
                                                         onChange={(e) => handleInputChange('typeBeartArtists', e.target.value)}
-                                                        placeholder="DRAKE X TRAVIS SCOTT"
+                                                        placeholder="ie. DRAKE X TRAVIS SCOTT"
                                                         className="floating-input w-full px-4 py-3 rounded-xl font-mono"
                                                     />
                                                     {errors.typeBeartArtists && (
@@ -1270,8 +1270,16 @@
             );
         };
 
-        const LandingPage = ({ onStart }) => (
-            <div className="h-screen flex flex-col items-center justify-center text-center text-white px-6">
+        const LandingPage = ({ onStart, onAbout }) => (
+            <div className="h-screen flex flex-col items-center justify-center text-center text-white px-6 relative">
+                {/* About link in top right */}
+                <button
+                    onClick={onAbout}
+                    className="absolute top-8 right-8 text-white/70 hover:text-white transition-colors duration-300 text-lg underline"
+                >
+                    about us
+                </button>
+                
                 <h1 className="landing-element landing-title text-5xl font-extrabold mb-2 tracking-wider drop-shadow-lg">
                     type beat video generator
                 </h1>
@@ -1287,13 +1295,160 @@
             </div>
         );
 
-        const App = () => {
-        const [started, setStarted] = React.useState(false);
-        return started ? (
-            <BeatUploaderApp />
-        ) : (
-            <LandingPage onStart={() => setStarted(true)} />
+        // About Us Page Component
+        const AboutPage = ({ onBack }) => (
+            <div className="min-h-screen relative">
+                {/* Credit Button */}
+                <a 
+                    href="https://linktr.ee/1mains" 
+                    target="_blank" 
+                    rel="noopener noreferrer" 
+                    className="credit-button"
+                >
+                    <img 
+                        src="mainslogo.jpg" 
+                        alt="Mains" 
+                        className="credit-avatar"
+                    />
+                    <span className="credit-text">fw 1mains</span>
+                </a>
+
+                <div className="container mx-auto px-6 py-8 h-screen flex flex-col">
+                    {/* Header with back button */}
+                    <div className="flex items-center justify-between mb-8">
+                        <button
+                            onClick={onBack}
+                            className="text-white/80 hover:text-white transition-colors duration-300 flex items-center text-lg"
+                        >
+                            <span className="mr-2">←</span> Back
+                        </button>
+                        
+                        <div className="logo-space text-center flex-1">
+                            about us
+                        </div>
+                        
+                        <div className="w-20"></div> {/* Spacer for centering */}
+                    </div>
+
+                    <div className="scrollable-content">
+                        <div className="max-w-4xl mx-auto">
+                            <div className="floating-form rounded-2xl p-8">
+                                <div className="text-center mb-3">
+                                    <div className="text-6xl mb-6">🎵</div>
+                                    <h1 className="text-4xl font-bold text-white tracking-wide mb-2">
+                                        type beat video generator
+                                    </h1>
+                                    <p className="text-xl text-white/80 italic">
+                                        Streamlining promotion for music producers
+                                    </p>
+                                </div>
+
+                                <div className="space-y-8 text-white">
+                                    <div>
+                                        <h2 className="text-2xl font-semibold mb-2 tracking-wide">our mission.</h2>
+                                        <p className="text-white/90 leading-relaxed">
+                                            We created this tool to solve a common problem in the beat-making community: the tedious process of 
+                                            creating and uploading type beat videos to YouTube. What used to take hours of manual work - creating 
+                                            thumbnails, writing descriptions, adding tags, and uploading - now takes just minutes.
+                                        </p>
+                                    </div>
+
+                                    <div>
+                                        <h2 className="text-2xl font-semibold mb-2 tracking-wide">what we do.</h2>
+                                        <div className="space-y-4 text-white/90">
+                                            <div className="flex items-start">
+                                                <span className="text-2xl mr-4">🎬</span>
+                                                <div>
+                                                    <strong>automated video creation:</strong> your beat + cover art is used to create a ready to post, type beat video
+                                                </div>
+                                            </div>
+                                            <div className="flex items-start">
+                                                <span className="text-2xl mr-4">📝</span>
+                                                <div>
+                                                    <strong>smart metadata generation:</strong> your tags + links are used to create full titles and descriptions for videos
+                                                </div>
+                                            </div>
+                                            <div className="flex items-start">
+                                                <span className="text-2xl mr-4">🔗</span>
+                                                <div>
+                                                    <strong>beatStars integration:</strong> BPM and key information are directly from your BeatStars listings
+                                                </div>
+                                            </div>
+                                            <div className="flex items-start">
+                                                <span className="text-2xl mr-4">📤</span>
+                                                <div>
+                                                    <strong>direct youtube upload:</strong> login + post directly to your channel with one click
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <h2 className="text-2xl font-semibold mb-2 tracking-wide">why it matters.</h2>
+                                        <p className="text-white/90 leading-relaxed">
+                                            In today's music industry, consistent content creation is crucial for building an audience. 
+                                            Type beat videos are one of the most effective ways for producers to showcase their work and 
+                                            connect with artists. Our tool removes the technical barriers, letting you focus on what you 
+                                            do best - creating amazing beats.
+                                        </p>
+                                    </div>
+
+                                    <div>
+                                        <h2 className="text-2xl font-semibold mb-2 tracking-wide">get started.</h2>
+                                        <p className="text-white/90 leading-relaxed mb-6">
+                                            Ready to streamline your beat promotion workflow? Connect your YouTube account, 
+                                            upload your beat and cover art, and let us handle the rest.
+                                        </p>
+                                        
+                                        <button
+                                            onClick={onBack}
+                                            className="submit-button px-8 py-4 rounded-xl font-bold text-white uppercase tracking-wide"
+                                        >
+                                            Start Uploading Beats
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         );
+
+        // Simple hash-based router
+        const useHistoryRouter = () => {
+            const [route, setRoute] = React.useState(window.location.pathname || '/');
+
+            React.useEffect(() => {
+                const handlePopState = () => setRoute(window.location.pathname || '/');
+                window.addEventListener('popstate', handlePopState);
+                return () => window.removeEventListener('popstate', handlePopState);
+            }, []);
+
+            const navigate = (path) => {
+                window.history.pushState({}, '', path);
+                setRoute(path);
+            };
+
+            return { route, navigate };
+        };
+
+
+
+        const App = () => {
+            const [started, setStarted] = React.useState(false);
+            const { route, navigate } = useHistoryRouter();
+
+            // Handle routing
+            if (route === '/about') {
+                return <AboutPage onBack={() => navigate('/')} />;
+            }
+            
+            return started ? (
+                <BeatUploaderApp />
+            ) : (
+                <LandingPage onStart={() => setStarted(true)} onAbout={() => navigate('/about')} />
+            );
         };
 
         ReactDOM.render(<App />, document.getElementById('root'));
