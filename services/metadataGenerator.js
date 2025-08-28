@@ -24,7 +24,7 @@ class MetadataGenerator {
     const title = beatTitle;
 
     let description = '';
-    description += 'mail - mainsputitinme@gmail.com\n';
+    description += 'mail - placeholder@gmail.com\n';
     description += instagramLink
       ? `ig - ${instagramLink}\n`
       : 'ig - instagram.com/1mains\n';
