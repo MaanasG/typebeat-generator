@@ -74,7 +74,8 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));  // CHANGE THIS LINE
 });
 
-// New endpoint to check BPM/Key from BeatStars link
+/*
+//  endpoint to check BPM/Key from BeatStars link
 app.post('/api/check-beatstars-data', async (req, res) => {
   try {
     const { beatstarsLink } = req.body;
@@ -103,6 +104,7 @@ app.post('/api/check-beatstars-data', async (req, res) => {
     });
   }
 });
+*/
 
 // Main upload endpoint
 app.post('/api/upload-beat', upload.fields([
@@ -110,16 +112,12 @@ app.post('/api/upload-beat', upload.fields([
   { name: 'coverImage', maxCount: 1 }
 ]), async (req, res) => {
   try {
-    const { 
-      beatTitle, 
-      typeBeartArtists, 
-      instagramLink, 
-      beatstarsLink, 
-      genre,
-      manualBpm,
-      manualKey 
-    } = req.body;
+    const { beatTitle, tags, instagramLink, beatstarsLink, genre, manualBpm, manualKey, backgroundStyle } = req.body;
     
+    const tagsArray = typeof tags === 'string'
+      ? tags.split(',').map(t => t.trim()).filter(Boolean)
+      : Array.isArray(tags) ? tags : [];
+
     const beatFile = req.files['beatFile'][0];
     const coverImage = req.files['coverImage'][0];
     
@@ -132,14 +130,15 @@ app.post('/api/upload-beat', upload.fields([
       audioPath: beatFile.path,
       imagePath: coverImage.path,
       outputDir: videosDir,
-      sessionId
+      sessionId,
+      backgroundStyle // <-- add this
     });
 
     // Step 2: Generate metadata using AI (now with manual BPM/Key support)
     console.log('Generating metadata...');
     const metadata = await metadataGenerator.generateMetadata({
       beatTitle,
-      typeBeartArtists,
+      tags,
       genre,
       instagramLink,
       beatstarsLink,

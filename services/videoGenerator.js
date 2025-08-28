@@ -5,57 +5,71 @@ const path = require('path');
 ffmpeg.setFfmpegPath(ffmpegPath);
 
 class VideoGenerator {
-  async generateVideo({ audioPath, imagePath, outputDir, sessionId }) {
-    return new Promise(async (resolve, reject) => {
-      try {
+  async generateVideo({ audioPath, imagePath, outputDir, sessionId, backgroundStyle = 'blurred' }) {
+  return new Promise(async (resolve, reject) => {
+    try {
+      const outputPath = path.join(outputDir, `video-${sessionId}.mp4`);
+
+      let finalImagePath;
+
+      if (backgroundStyle === 'black') {
+        // Just scale the original image to fit black background
+        const blackBackgroundPath = path.join(outputDir, `temp-black-${sessionId}.jpg`);
+        await this.createBlackBackgroundImage({
+          originalImagePath: imagePath,
+          outputPath: blackBackgroundPath
+        });
+        finalImagePath = blackBackgroundPath;
+      } else {
+        // Existing blurred background workflow
         const tempBlurredImagePath = path.join(outputDir, `temp-bg-${sessionId}.jpg`);
         const tempCompositeImagePath = path.join(outputDir, `temp-composite-${sessionId}.jpg`);
-        const outputPath = path.join(outputDir, `video-${sessionId}.mp4`);
-        
-        console.log(`Step 1: Creating blurred background image`);
-        
-        // Step 1: Create blurred background image (very fast)
+
         await this.createBlurredBackgroundImage({
           imagePath,
           outputPath: tempBlurredImagePath
         });
-        
-        console.log(`Step 2: Creating composite image with centered original`);
-        
-        // Step 2: Create composite image with original centered on blurred background
+
         await this.createCompositeImage({
           originalImagePath: imagePath,
           blurredImagePath: tempBlurredImagePath,
           outputPath: tempCompositeImagePath
         });
-        
-        console.log(`Step 3: Generating final video from composite image`);
-        
-        // Step 3: Create video from composite image and audio
-        await this.createVideoFromImage({
-          imagePath: tempCompositeImagePath,
-          audioPath,
-          outputPath
-        });
-        
-        // Clean up temp files
-        const fs = require('fs');
-        if (fs.existsSync(tempBlurredImagePath)) {
-          fs.unlinkSync(tempBlurredImagePath);
-        }
-        if (fs.existsSync(tempCompositeImagePath)) {
-          fs.unlinkSync(tempCompositeImagePath);
-        }
-        
-        console.log('Video generation completed');
-        resolve(outputPath);
-        
-      } catch (err) {
-        console.error('Video generation error:', err);
-        reject(err);
+
+        finalImagePath = tempCompositeImagePath;
       }
-    });
-  }
+
+      await this.createVideoFromImage({
+        imagePath: finalImagePath,
+        audioPath,
+        outputPath
+      });
+
+      console.log('Video generation completed');
+      resolve(outputPath);
+    } catch (err) {
+      console.error('Video generation error:', err);
+      reject(err);
+    }
+  });
+}
+
+createBlackBackgroundImage({ originalImagePath, outputPath }) {
+  return new Promise((resolve, reject) => {
+    ffmpeg()
+      .input(originalImagePath)
+      .outputOptions([
+        '-vf', 'scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black',
+        '-frames:v', '1'
+      ])
+      .output(outputPath)
+      .on('start', cmd => console.log('FFmpeg black background command:', cmd))
+      .on('end', resolve)
+      .on('error', reject)
+      .run();
+  });
+}
+
   
   createBlurredBackgroundImage({ imagePath, outputPath }) {
     return new Promise((resolve, reject) => {

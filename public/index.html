@@ -583,17 +583,18 @@
             );
         };
 
-        const BeatUploaderApp = () => {
+            const BeatUploaderApp = () => {
             const [formData, setFormData] = useState({
                 beatFile: null,
                 coverImage: null,
                 beatTitle: '',
-                typeBeartArtists: '',
+                tags: '',                // NEW
                 instagramLink: '',
                 beatstarsLink: '',
-                genre: 'hip-hop'
+                genre: 'hip-hop',
+                backgroundStyle: 'blurred' // NEW
             });
-
+            const [preScrapedData, setPreScrapedData] = useState(null);
             const [isMuted, setIsMuted] = React.useState(true);
             React.useEffect(() => {
                 const videoElement = document.getElementById("background-video");
@@ -686,8 +687,8 @@
                 if (!formData.beatTitle.trim()) {
                     newErrors.beatTitle = 'Beat title is required';
                 }
-                if (!formData.typeBeartArtists.trim()) {
-                    newErrors.typeBeartArtists = 'Type beat artists are required';
+                if (!formData.tags.trim()) {
+                    newErrors.tags = 'Type beat artists are required';
                 }
                 if (!isYouTubeAuthenticated) {
                     newErrors.auth = 'Please authenticate with YouTube first';
@@ -721,15 +722,15 @@
                         const result = await response.json();
                         
                         if (result.scrapingFailed) {
-                            // Scraping failed, show modal for manual input
                             setPendingSubmission(e);
                             setProgress({ step: '', percentage: 0 });
                             setShowBpmKeyModal(true);
                             return;
                         } else if (result.data) {
-                            // Auto-scraping succeeded, use the data
                             setManualBpmKey(result.data);
+                            setPreScrapedData(result.data); // <-- NEW
                         }
+
                         
                     } catch (error) {
                         console.error('Error checking BeatStars:', error);
@@ -755,10 +756,12 @@
                     formDataObj.append('beatFile', formData.beatFile);
                     formDataObj.append('coverImage', formData.coverImage);
                     formDataObj.append('beatTitle', formData.beatTitle);
-                    formDataObj.append('typeBeartArtists', formData.typeBeartArtists);
                     formDataObj.append('instagramLink', formData.instagramLink);
                     formDataObj.append('beatstarsLink', formData.beatstarsLink);
                     formDataObj.append('genre', formData.genre);
+                    formDataObj.append('tags', formData.tags);
+                    formDataObj.append('backgroundStyle', formData.backgroundStyle);
+                    
                     
                     // Add manual BPM/Key if provided
                     if (manualBpmKey.bpm) {
@@ -767,6 +770,9 @@
                     if (manualBpmKey.key) {
                         formDataObj.append('manualKey', manualBpmKey.key);
                     }
+                    if (preScrapedData) {
+                        formDataObj.append('preScrapedData', JSON.stringify(preScrapedData));
+                    }   
 
                     setProgress({ step: 'UPLOADING FILES...', percentage: 10 });
 
@@ -801,11 +807,12 @@
             };
 
             const handleBpmKeySubmit = ({ bpm, key }) => {
-                setManualBpmKey({ bpm, key });
+                const data = { bpm, key };
+                setManualBpmKey(data);
+                setPreScrapedData(data); // <-- NEW
                 setShowBpmKeyModal(false);
                 setPendingSubmission(null);
-                
-                // Continue with upload
+
                 setTimeout(() => {
                     performUpload();
                 }, 100);
@@ -1091,7 +1098,21 @@
                                                     fileInputRef={coverImageRef}
                                                 />
                                             </div>
-
+                                            
+                                            <div>
+                                            <label className="block text-sm font-semibold text-white mb-3 uppercase tracking-wide">
+                                                Background Style
+                                            </label>
+                                            <select
+                                                value={formData.backgroundStyle}
+                                                onChange={(e) => handleInputChange('backgroundStyle', e.target.value)}
+                                                className="floating-input w-full px-4 py-3 rounded-xl font-mono"
+                                            >
+                                                <option value="blurred">Blurred</option>
+                                                <option value="black">Black</option>
+                                            </select>
+                                            </div>
+                                            
                                             <div className="grid lg:grid-cols-2 gap-6 mb-6">
                                                 <div>
                                                     <label className="block text-sm font-semibold text-white mb-3 uppercase tracking-wide">
@@ -1112,22 +1133,23 @@
                                                 </div>
 
                                                 <div>
-                                                    <label className="block text-sm font-semibold text-white mb-3 uppercase tracking-wide">
-                                                        Type Beat Artists *
-                                                    </label>
-                                                    <input
-                                                        type="text"
-                                                        value={formData.typeBeartArtists}
-                                                        onChange={(e) => handleInputChange('typeBeartArtists', e.target.value)}
-                                                        placeholder="ie. DRAKE X TRAVIS SCOTT"
-                                                        className="floating-input w-full px-4 py-3 rounded-xl font-mono"
-                                                    />
-                                                    {errors.typeBeartArtists && (
-                                                        <div className="mt-2 p-2 error-display rounded text-sm">
-                                                            {errors.typeBeartArtists}
-                                                        </div>
-                                                    )}
+                                                <label className="block text-sm font-semibold text-white mb-3 uppercase tracking-wide">
+                                                    Tags (comma separated) *
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    value={formData.tags}
+                                                    onChange={(e) => handleInputChange('tags', e.target.value)}
+                                                    placeholder="drake, travis scott, ambient, dark"
+                                                    className="floating-input w-full px-4 py-3 rounded-xl font-mono"
+                                                />
+                                                {errors.tags && (
+                                                    <div className="mt-2 p-2 error-display rounded text-sm">
+                                                    {errors.tags}
+                                                    </div>
+                                                )}
                                                 </div>
+
                                             </div>
 
                                             <div className="grid lg:grid-cols-3 gap-6 mb-8">
@@ -1247,7 +1269,7 @@
                                                         beatFile: null,
                                                         coverImage: null,
                                                         beatTitle: '',
-                                                        typeBeartArtists: '',
+                                                        tags: '',
                                                         instagramLink: '',
                                                         beatstarsLink: '',
                                                         genre: 'hip-hop'

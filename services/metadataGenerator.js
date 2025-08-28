@@ -6,23 +6,10 @@ const puppeteer = require('puppeteer');
 
 class MetadataGenerator {
 
-  async generateMetadata({ beatTitle, typeBeartArtists, genre, instagramLink, beatstarsLink, manualBpm, manualKey }) {
-    try {
-      // Skip AI generation and go straight to fallback format
-      return this.generateFallbackMetadata({ 
+  async generateMetadata({ beatTitle, tags, genre, instagramLink, beatstarsLink, manualBpm, manualKey }) {
+    return this.generateFallbackMetadata({ 
         beatTitle, 
-        typeBeartArtists, 
-        genre, 
-        instagramLink, 
-        beatstarsLink, 
-        manualBpm, 
-        manualKey 
-      });
-    } catch (error) {
-      console.error('Metadata generation failed:', error);
-      return this.generateFallbackMetadata({ 
-        beatTitle, 
-        typeBeartArtists, 
+        tags, 
         genre, 
         instagramLink, 
         beatstarsLink, 
@@ -30,7 +17,6 @@ class MetadataGenerator {
         manualKey 
       });
     }
-  }
 
   async scrapeBeatStarsData(beatstarsLink, maxRetries = 3) {
     let browser;
@@ -371,21 +357,21 @@ class MetadataGenerator {
     // Split artist names by comma and clean them
     const artists = artistNames.split(',').map(name => name.trim().toLowerCase());
     
-    const tags = [];
+    const generatedTags = [];
     
     // Add hashtags for each artist
     artists.forEach(artist => {
-      tags.push(`#${artist.replace(/\s+/g, '')}`);
+      generatedTags.push(`#${artist.replace(/\s+/g, '')}`);
     });
     
     // Add various permutations
     artists.forEach(artist => {
       const cleanArtist = artist.replace(/\s+/g, '');
-      tags.push(`${cleanArtist} type beat`);
-      tags.push(`free ${cleanArtist} type beat`);
+      generatedTags.push(`${cleanArtist} type beat`);
+      generatedTags.push(`free ${cleanArtist} type beat`);
     });
     
-    // Add additional generic tags
+    // Add additional generic generatedTags
     const genericTags = [
       'type beat',
       'free type beat',
@@ -399,13 +385,13 @@ class MetadataGenerator {
       'fire beat'
     ];
     
-    tags.push(...genericTags);
+    generatedTags.push(...genericTags);
     
     // Remove duplicates and return
-    return [...new Set(tags)];
+    return [...new Set(generatedTags)];
   }
 
-  async generateFallbackMetadata({ beatTitle, typeBeartArtists, genre, instagramLink, beatstarsLink, manualBpm, manualKey }) {
+  async generateFallbackMetadata({ beatTitle, tags, genre, instagramLink, beatstarsLink, manualBpm, manualKey }) {
     // Start with manual values if provided
     let bpm = null;
     let key = null;
@@ -443,7 +429,8 @@ class MetadataGenerator {
     console.log('Final metadata values:', { bpm, key, scrapingFailed });
     
     // Format title
-    const title = `${typeBeartArtists} Type Beat - "${beatTitle}"`;
+    // const title = `${tags} Type Beat - "${beatTitle}"`;
+    const title = beatTitle;
     
     // Format description
     let description = '';
@@ -478,13 +465,13 @@ class MetadataGenerator {
     description += 'important: free for nonprofit only, purchase a lease by contacting me thru instagram/email\n\n';
     
     // Generate and add tags
-    const tags = this.generateTags(typeBeartArtists);
-    description += `tags: ${tags.join(', ')}`;
+    const generatedTags = this.generateTags(tags);
+    description += `tags: ${generatedTags.join(', ')}`;
     
     return {
       title,
       description,
-      tags: tags.slice(0, 15), // YouTube has a limit on tags
+      tags: generatedTags.slice(0, 15), // YouTube has a limit on tags
       scrapingFailed: scrapingFailed, // Only show as failed if scraping failed and no manual input
       scrapedData: { bpm, key }
     };
