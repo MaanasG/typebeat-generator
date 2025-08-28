@@ -51,10 +51,11 @@ app.use(express.json());
 app.use(express.static('public')); 
 
 // create uploads directory if it doesn't exist
-const uploadsDir = path.join(__dirname, 'uploads');
-const videosDir = path.join(__dirname, 'videos');
-if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir);
-if (!fs.existsSync(videosDir)) fs.mkdirSync(videosDir);
+const uploadsDir = path.join('/tmp', 'uploads');
+const videosDir = path.join('/tmp', 'videos');
+
+if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+if (!fs.existsSync(videosDir)) fs.mkdirSync(videosDir, { recursive: true });
 
 // cfigure multer for file uploads
 const storage = multer.diskStorage({
