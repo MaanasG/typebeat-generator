@@ -444,34 +444,9 @@
             const [key, setKey] = useState(initialKey);
             const [isChecking, setIsChecking] = useState(false);
             
-            useEffect(() => {
-                if (isOpen && beatstarsLink && !initialBpm && !initialKey) {
-                    checkBeatStarsData();
-                }
-            }, [isOpen, beatstarsLink]);
-            
-            const checkBeatStarsData = async () => {
-                setIsChecking(true);
-                try {
-                    const response = await fetch(`${API_BASE}/check-beatstars-data`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({ beatstarsLink }),
-                    });
-                    
-                    const result = await response.json();
-                    if (result.success && result.data) {
-                        if (result.data.bpm) setBpm(result.data.bpm.toString());
-                        if (result.data.key) setKey(result.data.key);
-                    }
-                } catch (error) {
-                    console.error('Error checking BeatStars data:', error);
-                } finally {
-                    setIsChecking(false);
-                }
-            };
+            <p className="text-white/70 text-sm uppercase tracking-wide">
+                Auto-detect failed, please enter manually
+            </p>
 
             const handleSubmit = () => {
                 onSubmit({ bpm: bpm ? parseInt(bpm) : null, key: key || null });
@@ -494,7 +469,7 @@
                                 Beat Information
                             </h2>
                             <p className="text-white/70 text-sm uppercase tracking-wide">
-                                {isChecking ? 'Checking BeatStars...' : 'Auto-scraping failed, please enter manually'}
+                                {isChecking ? 'Checking BeatStars...' : 'Auto-detect failed, please enter manually'}
                             </p>
                         </div>
 
@@ -704,7 +679,7 @@
                 if (!validateForm()) {
                     return;
                 }
-
+/*
                 // Check if we need BPM/Key data and BeatStars link exists
                 if (formData.beatstarsLink && !manualBpmKey.bpm && !manualBpmKey.key) {
                     // First try to auto-scrape, if it fails, show modal
@@ -741,7 +716,7 @@
                         return;
                     }
                 }
-
+*/
                 // Proceed with upload
                 await performUpload();
             };
@@ -789,13 +764,19 @@
                     setProgress({ step: 'PROCESSING RESPONSE...', percentage: 90 });
 
                     const result = await response.json();
-                    
+
                     if (result.success) {
                         setProgress({ step: 'COMPLETE!', percentage: 100 });
                         setResult(result.result);
+                    } else if (result.scrapingFailed) {
+                        // ✅ scraping failed, ask for manual BPM/Key
+                        setIsProcessing(false);
+                        setProgress({ step: '', percentage: 0 });
+                        setShowBpmKeyModal(true);
+                        return; // stop here, wait for user input
                     } else {
                         throw new Error(result.error || 'Upload failed');
-                    }
+}
                     
                 } catch (error) {
                     console.error('Upload failed:', error);
@@ -930,7 +911,7 @@
                             <div className="text-3xl mr-4">📺</div>
                             <div>
                                 <h3 className="font-bold text-xl text-white uppercase tracking-wide">
-                                    YOUTUBE AUTH
+                                    youtube auth
                                 </h3>
                                 <p className="text-white/70 text-sm mt-1 uppercase tracking-wide">
                                     {isYouTubeAuthenticated ? 
@@ -1250,7 +1231,7 @@
                                         <div className="text-center py-12">
                                             <div className="text-6xl mb-8">⚡</div>
                                             <h2 className="text-3xl font-bold text-white mb-8 uppercase tracking-wide">
-                                                PROCESSING BEAT
+                                                processing beat...
                                             </h2>
                                             <ProgressBar step={progress.step} percentage={progress.percentage} />
                                             <p className="text-white/70 text-sm uppercase tracking-wide">

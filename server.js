@@ -18,18 +18,18 @@ const YouTubeUploader = require('./services/youtubeUploader');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Middleware
+// middleware
 app.use(cors());
 app.use(express.json());
 app.use(express.static('public')); // ADD THIS LINE
 
-// Create uploads directory if it doesn't exist
+// create uploads directory if it doesn't exist
 const uploadsDir = path.join(__dirname, 'uploads');
 const videosDir = path.join(__dirname, 'videos');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir);
 if (!fs.existsSync(videosDir)) fs.mkdirSync(videosDir);
 
-// Configure multer for file uploads
+// cfigure multer for file uploads
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
     cb(null, uploadsDir);
@@ -64,7 +64,7 @@ const upload = multer({
   }
 });
 
-// Initialize services
+// initialize services
 const videoGenerator = new VideoGenerator();
 const metadataGenerator = new MetadataGenerator();
 const youtubeUploader = new YouTubeUploader();
@@ -107,34 +107,96 @@ app.post('/api/check-beatstars-data', async (req, res) => {
 */
 
 // Main upload endpoint
+// Replace the BPM/Key resolution logic in your server.js upload endpoint:
+
 app.post('/api/upload-beat', upload.fields([
   { name: 'beatFile', maxCount: 1 },
   { name: 'coverImage', maxCount: 1 }
 ]), async (req, res) => {
   try {
     const { beatTitle, tags, instagramLink, beatstarsLink, genre, manualBpm, manualKey, backgroundStyle } = req.body;
-    
-    const tagsArray = typeof tags === 'string'
-      ? tags.split(',').map(t => t.trim()).filter(Boolean)
-      : Array.isArray(tags) ? tags : [];
 
     const beatFile = req.files['beatFile'][0];
     const coverImage = req.files['coverImage'][0];
-    
     const sessionId = uuidv4();
     console.log(`Starting upload process for session: ${sessionId}`);
 
-    // Step 1: Generate video
+    // Step 1: Resolve BPM/Key before video generation
+    // Parse manual values properly (they come as strings from FormData)
+    let bpm = null;
+    let key = null;
+
+    // Check for manual values first (they take priority)
+    if (manualBpm && manualBpm.trim() !== '') {
+      bpm = parseInt(manualBpm.trim(), 10);
+      console.log('Using manual BPM:', bpm);
+    }
+    
+    if (manualKey && manualKey.trim() !== '') {
+      key = manualKey.trim();
+      console.log('Using manual Key:', key);
+    }
+
+    // Only attempt scraping if we still don't have values AND we have a BeatStars link
+    const needsBpm = !bpm || isNaN(bpm);
+    const needsKey = !key;
+    
+    console.log('BPM/Key status:', { 
+      needsBpm, 
+      needsKey, 
+      hasBeatstarsLink: !!beatstarsLink,
+      manualBpm,
+      manualKey 
+    });
+
+    if ((needsBpm || needsKey) && beatstarsLink) {
+      console.log('Attempting to scrape BeatStars data...');
+      try {
+        const scraped = await metadataGenerator.scrapeBeatStarsData(beatstarsLink);
+        
+        // Only use scraped values if we don't have manual ones
+        if (needsBpm && scraped.bpm) {
+          bpm = scraped.bpm;
+          console.log('Scraped BPM:', bpm);
+        }
+        if (needsKey && scraped.key) {
+          key = scraped.key;
+          console.log('Scraped Key:', key);
+        }
+      } catch (scrapeError) {
+        console.error('Scraping failed:', scrapeError);
+      }
+    } else {
+      console.log('Skipping scraping - manual values provided or no BeatStars link');
+    }
+
+    // Final check - if still missing BPM or Key, request manual input
+    if (!bpm || !key || isNaN(bpm)) {
+      console.log('BPM/Key still missing after scraping attempt:', { bpm, key });
+      return res.json({
+        success: false,
+        scrapingFailed: true,
+        message: 'Could not auto-detect BPM and Key. Please provide them manually.',
+        missingData: {
+          bpm: !bpm || isNaN(bpm),
+          key: !key
+        }
+      });
+    }
+
+    console.log('Final BPM/Key values:', { bpm, key });
+
+    // Step 2: Generate video (now we have BPM/Key)
     console.log('Generating video...');
     const videoPath = await videoGenerator.generateVideo({
       audioPath: beatFile.path,
       imagePath: coverImage.path,
       outputDir: videosDir,
       sessionId,
-      backgroundStyle // <-- add this
+      backgroundStyle
     });
 
-    // Step 2: Generate metadata using AI (now with manual BPM/Key support)
+    // Step 3: Generate metadata
     console.log('Generating metadata...');
     const metadata = await metadataGenerator.generateMetadata({
       beatTitle,
@@ -142,28 +204,19 @@ app.post('/api/upload-beat', upload.fields([
       genre,
       instagramLink,
       beatstarsLink,
-      manualBpm,
-      manualKey
+      manualBpm: bpm,
+      manualKey: key
     });
 
-    // Step 3: Upload to YouTube
+    // Step 4: Upload to YouTube
     console.log('Uploading to YouTube...');
     const uploadResult = await youtubeUploader.uploadVideo({
       videoPath,
       title: metadata.title,
       description: metadata.description,
       tags: metadata.tags,
-      categoryId: '10' // Music category
+      categoryId: '10'
     });
-
-    // Cleanup temporary files
-    setTimeout(() => {
-      [beatFile.path, coverImage.path, videoPath].forEach(filePath => {
-        if (fs.existsSync(filePath)) {
-          fs.unlinkSync(filePath);
-        }
-      });
-    }, 5000);
 
     res.json({
       success: true,
@@ -179,10 +232,7 @@ app.post('/api/upload-beat', upload.fields([
 
   } catch (error) {
     console.error('Upload process failed:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -208,15 +258,15 @@ app.get('/api/auth/youtube/callback', async (req, res) => {
     const { code, error } = req.query;
     
     if (error) {
-      // Redirect back to frontend with error
+      // redirect back to frontend with error
       return res.redirect(`/?auth_error=${encodeURIComponent(error)}`);
     }
     
     if (code) {
-      // Exchange code for tokens
+      // exchange code for tokens
       const tokens = await youtubeUploader.getTokensFromCode(code);
       
-      // Redirect back to frontend with success
+      // redirect back to frontend with success
       res.redirect('/?auth_success=true');
     } else {
       res.redirect('/?auth_error=no_code_received');

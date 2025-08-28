@@ -7,16 +7,99 @@ const puppeteer = require('puppeteer');
 class MetadataGenerator {
 
   async generateMetadata({ beatTitle, tags, genre, instagramLink, beatstarsLink, manualBpm, manualKey }) {
-    return this.generateFallbackMetadata({ 
-        beatTitle, 
-        tags, 
-        genre, 
-        instagramLink, 
-        beatstarsLink, 
-        manualBpm, 
-        manualKey 
-      });
+    console.log('Generating metadata with:', { beatTitle, tags, genre, instagramLink, beatstarsLink, manualBpm, manualKey });
+    
+    let bpm = null;
+    let key = null;
+
+    // Check for manual values first (they take priority)
+    if (manualBpm !== null && manualBpm !== undefined && !isNaN(manualBpm)) {
+      bpm = manualBpm;
+      console.log('Using manual BPM:', bpm);
     }
+    
+    if (manualKey !== null && manualKey !== undefined && manualKey.trim() !== '') {
+      key = manualKey.trim();
+      console.log('Using manual Key:', key);
+    }
+
+    // Only attempt scraping if we still don't have values AND we have a BeatStars link
+    const needsBpm = bpm === null || isNaN(bpm);
+    const needsKey = key === null || key === '';
+    
+    console.log('BPM/Key status:', { 
+      needsBpm, 
+      needsKey, 
+      hasBeatstarsLink: !!beatstarsLink,
+      manualBpm,
+      manualKey 
+    });
+
+    if ((needsBpm || needsKey) && beatstarsLink) {
+      console.log('Attempting to scrape BeatStars data...');
+      try {
+        const scraped = await this.scrapeBeatStarsData(beatstarsLink);
+        
+        // Only use scraped values if we don't have manual ones
+        if (needsBpm && scraped.bpm) {
+          bpm = scraped.bpm;
+          console.log('Scraped BPM:', bpm);
+        }
+        if (needsKey && scraped.key) {
+          key = scraped.key;
+          console.log('Scraped Key:', key);
+        }
+      } catch (scrapeError) {
+        console.error('Scraping failed:', scrapeError);
+      }
+    } else {
+      console.log('Skipping scraping - manual values provided or no BeatStars link');
+    }
+
+    // Final check - if still missing BPM or Key, request manual input
+    if ((bpm === null || isNaN(bpm)) || (key === null || key === '')) {
+      console.log('BPM/Key still missing after scraping attempt:', { bpm, key });
+      return {
+        requiresManualInput: true,
+        missingData: {
+          bpm: bpm === null || isNaN(bpm),
+          key: key === null || key === ''
+        }
+      };
+    }
+
+    console.log('Final BPM/Key values:', { bpm, key });
+
+    // Build YouTube metadata
+    const title = beatTitle;
+
+    let description = '';
+    description += 'mail - mainsputitinme@gmail.com\n';
+    description += instagramLink
+      ? `ig - ${instagramLink}\n`
+      : 'ig - instagram.com/1mains\n';
+
+    if (beatstarsLink) {
+      description += `download/purchase - ${beatstarsLink}\n`;
+    }
+
+    description += '\n';
+    description += bpm ? `${bpm}bpm\n` : 'Not Found\n';
+    description += key ? `${key}\n` : 'Not Found\n';
+
+    description += '\n';
+    description += 'important: free for nonprofit only, purchase a lease by contacting me thru instagram/email\n\n';
+
+    const generatedTags = this.generateTags(tags);
+    description += `tags: ${generatedTags.join(', ')}`;
+
+    return {
+      title,
+      description,
+      tags: generatedTags.slice(0, 15),
+      requiresManualInput: false
+    };
+  }
 
   async scrapeBeatStarsData(beatstarsLink, maxRetries = 3) {
     let browser;
@@ -389,92 +472,6 @@ class MetadataGenerator {
     
     // Remove duplicates and return
     return [...new Set(generatedTags)];
-  }
-
-  async generateFallbackMetadata({ beatTitle, tags, genre, instagramLink, beatstarsLink, manualBpm, manualKey }) {
-    // Start with manual values if provided
-    let bpm = null;
-    let key = null;
-    let scrapingFailed = false;
-    
-    // Parse manual input first (these take priority)
-    if (manualBpm !== undefined && manualBpm !== null && manualBpm !== '') {
-      bpm = parseInt(manualBpm);
-      console.log('Using manual BPM:', bpm);
-    }
-    
-    if (manualKey !== undefined && manualKey !== null && manualKey !== '') {
-      key = manualKey;
-      console.log('Using manual Key:', key);
-    }
-    
-    // Only scrape BeatStars if we don't have manual values AND there's a link
-    if ((!bpm || !key) && beatstarsLink) {
-      console.log('Attempting to scrape BeatStars for missing data...');
-      const scrapedData = await this.scrapeBeatStarsData(beatstarsLink);
-      
-      // Only use scraped data if we don't have manual input
-      if (!bpm && scrapedData.bpm) {
-        bpm = scrapedData.bpm;
-        console.log('Using scraped BPM:', bpm);
-      }
-      if (!key && scrapedData.key) {
-        key = scrapedData.key;
-        console.log('Using scraped Key:', key);
-      }
-      
-      scrapingFailed = scrapedData.scrapingFailed && !bpm && !key;
-    }
-    
-    console.log('Final metadata values:', { bpm, key, scrapingFailed });
-    
-    // Format title
-    // const title = `${tags} Type Beat - "${beatTitle}"`;
-    const title = beatTitle;
-    
-    // Format description
-    let description = '';
-    
-    // Contact info
-    description += 'mail - mainsputitinme@gmail.com\n';
-    if (instagramLink) {
-      description += `ig - ${instagramLink}\n`;
-    } else {
-      description += 'ig - instagram.com/1mains\n';
-    }
-    if (beatstarsLink) {
-      description += `download/purchase - ${beatstarsLink}\n`;
-    }
-    
-    description += '\n';
-    
-    // BPM and Key with proper fallback
-    if (bpm) {
-      description += `${bpm}bpm\n`;
-    } else {
-      description += 'Not Found\n';
-    }
-    
-    if (key) {
-      description += `${key}\n`;
-    } else {
-      description += 'Not Found\n';
-    }
-    
-    description += '\n';
-    description += 'important: free for nonprofit only, purchase a lease by contacting me thru instagram/email\n\n';
-    
-    // Generate and add tags
-    const generatedTags = this.generateTags(tags);
-    description += `tags: ${generatedTags.join(', ')}`;
-    
-    return {
-      title,
-      description,
-      tags: generatedTags.slice(0, 15), // YouTube has a limit on tags
-      scrapingFailed: scrapingFailed, // Only show as failed if scraping failed and no manual input
-      scrapedData: { bpm, key }
-    };
   }
 
   // Keep the old formatDescription method for backward compatibility if needed
