@@ -18,10 +18,25 @@ const YouTubeUploader = require('./services/youtubeUploader');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+const cron = require('node-cron');
+const cleanupOldFiles = require('./services/cleanupService');
+
+// scheduled cleanup
+const schedule = '0 * * * *'; // hourly
+const isProduction = process.env.NODE_ENV === 'production';
+
+cron.schedule(schedule, async () => {
+  console.log(`Running ${isProduction ? 'production' : 'development'} cleanup...`);
+  await cleanupOldFiles(path.join(__dirname, 'uploads'), 60);
+  await cleanupOldFiles(path.join(__dirname, 'videos'), 60);
+});
+
+
+
 // middleware
 app.use(cors());
 app.use(express.json());
-app.use(express.static('public')); // ADD THIS LINE
+app.use(express.static('public')); 
 
 // create uploads directory if it doesn't exist
 const uploadsDir = path.join(__dirname, 'uploads');
@@ -71,7 +86,7 @@ const youtubeUploader = new YouTubeUploader();
 
 // Routes
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));  // CHANGE THIS LINE
+  res.sendFile(path.join(__dirname, 'public', 'index.html')); 
 });
 
 /*
