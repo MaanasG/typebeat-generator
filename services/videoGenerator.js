@@ -5,53 +5,56 @@ const path = require('path');
 ffmpeg.setFfmpegPath(ffmpegPath);
 
 class VideoGenerator {
-  async generateVideo({ audioPath, imagePath, outputDir, sessionId, backgroundStyle = 'blurred' }) {
-  return new Promise(async (resolve, reject) => {
-    try {
-      const outputPath = path.join(outputDir, `video-${sessionId}.mp4`);
+    async generateVideo({ audioPath, imagePath, outputDir, sessionId, backgroundStyle = 'blurred' }) {
+    return new Promise(async (resolve, reject) => {
+      const tempFiles = []; // Track all temp files for later cleanup
+      try {
+        const outputPath = path.join(outputDir, `video-${sessionId}.mp4`);
 
-      let finalImagePath;
+        let finalImagePath;
 
-      if (backgroundStyle === 'black') {
-        // Just scale the original image to fit black background
-        const blackBackgroundPath = path.join(outputDir, `temp-black-${sessionId}.jpg`);
-        await this.createBlackBackgroundImage({
-          originalImagePath: imagePath,
-          outputPath: blackBackgroundPath
+        if (backgroundStyle === 'black') {
+          const blackBackgroundPath = path.join(outputDir, `temp-black-${sessionId}.jpg`);
+          tempFiles.push(blackBackgroundPath);
+
+          await this.createBlackBackgroundImage({
+            originalImagePath: imagePath,
+            outputPath: blackBackgroundPath
+          });
+          finalImagePath = blackBackgroundPath;
+        } else {
+          const tempBlurredImagePath = path.join(outputDir, `temp-bg-${sessionId}.jpg`);
+          const tempCompositeImagePath = path.join(outputDir, `temp-composite-${sessionId}.jpg`);
+          tempFiles.push(tempBlurredImagePath, tempCompositeImagePath);
+
+          await this.createBlurredBackgroundImage({
+            imagePath,
+            outputPath: tempBlurredImagePath
+          });
+
+          await this.createCompositeImage({
+            originalImagePath: imagePath,
+            blurredImagePath: tempBlurredImagePath,
+            outputPath: tempCompositeImagePath
+          });
+
+          finalImagePath = tempCompositeImagePath;
+        }
+
+        await this.createVideoFromImage({
+          imagePath: finalImagePath,
+          audioPath,
+          outputPath
         });
-        finalImagePath = blackBackgroundPath;
-      } else {
-        // Existing blurred background workflow
-        const tempBlurredImagePath = path.join(outputDir, `temp-bg-${sessionId}.jpg`);
-        const tempCompositeImagePath = path.join(outputDir, `temp-composite-${sessionId}.jpg`);
 
-        await this.createBlurredBackgroundImage({
-          imagePath,
-          outputPath: tempBlurredImagePath
-        });
-
-        await this.createCompositeImage({
-          originalImagePath: imagePath,
-          blurredImagePath: tempBlurredImagePath,
-          outputPath: tempCompositeImagePath
-        });
-
-        finalImagePath = tempCompositeImagePath;
+        console.log('Video generation completed');
+        // Return both the video and the temp files to delete later
+        resolve({ videoPath: outputPath, tempFiles });
+      } catch (err) {
+        console.error('Video generation error:', err);
+        reject(err);
       }
-
-      await this.createVideoFromImage({
-        imagePath: finalImagePath,
-        audioPath,
-        outputPath
-      });
-
-      console.log('Video generation completed');
-      resolve(outputPath);
-    } catch (err) {
-      console.error('Video generation error:', err);
-      reject(err);
-    }
-  });
+    });
 }
 
 createBlackBackgroundImage({ originalImagePath, outputPath }) {

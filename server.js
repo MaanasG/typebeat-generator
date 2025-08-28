@@ -106,98 +106,69 @@ app.post('/api/check-beatstars-data', async (req, res) => {
 });
 */
 
-// Main upload endpoint
-// Replace the BPM/Key resolution logic in your server.js upload endpoint:
+// main upload endpoint
+
+const deleteFiles = async (filePaths) => {
+  for (const filePath of filePaths) {
+    if (!filePath) continue;
+    try {
+      await fs.promises.unlink(filePath);
+      console.log(`Deleted: ${filePath}`);
+    } catch (err) {
+      console.error(`Failed to delete ${filePath}:`, err.message);
+    }
+  }
+};
 
 app.post('/api/upload-beat', upload.fields([
   { name: 'beatFile', maxCount: 1 },
   { name: 'coverImage', maxCount: 1 }
 ]), async (req, res) => {
+  let cleanupFiles = []; // file deletion
   try {
     const { beatTitle, tags, instagramLink, beatstarsLink, genre, manualBpm, manualKey, backgroundStyle } = req.body;
 
     const beatFile = req.files['beatFile'][0];
     const coverImage = req.files['coverImage'][0];
+    cleanupFiles.push(beatFile.path, coverImage.path); // input file tracking
+
     const sessionId = uuidv4();
     console.log(`Starting upload process for session: ${sessionId}`);
 
-    // Step 1: Resolve BPM/Key before video generation
-    // Parse manual values properly (they come as strings from FormData)
-    let bpm = null;
-    let key = null;
+    // bpm/key resolution
+    let bpm = manualBpm?.trim() ? parseInt(manualBpm.trim(), 10) : null;
+    let key = manualKey?.trim() || null;
 
-    // Check for manual values first (they take priority)
-    if (manualBpm && manualBpm.trim() !== '') {
-      bpm = parseInt(manualBpm.trim(), 10);
-      console.log('Using manual BPM:', bpm);
-    }
-    
-    if (manualKey && manualKey.trim() !== '') {
-      key = manualKey.trim();
-      console.log('Using manual Key:', key);
-    }
-
-    // Only attempt scraping if we still don't have values AND we have a BeatStars link
-    const needsBpm = !bpm || isNaN(bpm);
-    const needsKey = !key;
-    
-    console.log('BPM/Key status:', { 
-      needsBpm, 
-      needsKey, 
-      hasBeatstarsLink: !!beatstarsLink,
-      manualBpm,
-      manualKey 
-    });
-
-    if ((needsBpm || needsKey) && beatstarsLink) {
-      console.log('Attempting to scrape BeatStars data...');
+    if ((!bpm || isNaN(bpm) || !key) && beatstarsLink) {
       try {
         const scraped = await metadataGenerator.scrapeBeatStarsData(beatstarsLink);
-        
-        // Only use scraped values if we don't have manual ones
-        if (needsBpm && scraped.bpm) {
-          bpm = scraped.bpm;
-          console.log('Scraped BPM:', bpm);
-        }
-        if (needsKey && scraped.key) {
-          key = scraped.key;
-          console.log('Scraped Key:', key);
-        }
+        if ((!bpm || isNaN(bpm)) && scraped.bpm) bpm = scraped.bpm;
+        if (!key && scraped.key) key = scraped.key;
       } catch (scrapeError) {
         console.error('Scraping failed:', scrapeError);
       }
-    } else {
-      console.log('Skipping scraping - manual values provided or no BeatStars link');
     }
 
-    // Final check - if still missing BPM or Key, request manual input
     if (!bpm || !key || isNaN(bpm)) {
-      console.log('BPM/Key still missing after scraping attempt:', { bpm, key });
+      await deleteFiles(cleanupFiles);
       return res.json({
         success: false,
         scrapingFailed: true,
-        message: 'Could not auto-detect BPM and Key. Please provide them manually.',
-        missingData: {
-          bpm: !bpm || isNaN(bpm),
-          key: !key
-        }
+        message: 'Could not auto-detect BPM and Key. Please provide them manually.'
       });
     }
 
-    console.log('Final BPM/Key values:', { bpm, key });
-
-    // Step 2: Generate video (now we have BPM/Key)
-    console.log('Generating video...');
-    const videoPath = await videoGenerator.generateVideo({
+    // vid gen
+    const { videoPath, tempFiles } = await videoGenerator.generateVideo({
       audioPath: beatFile.path,
       imagePath: coverImage.path,
       outputDir: videosDir,
       sessionId,
       backgroundStyle
     });
+    cleanupFiles.push(...tempFiles, videoPath);
 
-    // Step 3: Generate metadata
-    console.log('Generating metadata...');
+    // gen metadata
     const metadata = await metadataGenerator.generateMetadata({
       beatTitle,
       tags,
@@ -208,8 +179,7 @@ app.post('/api/upload-beat', upload.fields([
       manualKey: key
     });
 
-    // Step 4: Upload to YouTube
-    console.log('Uploading to YouTube...');
+    // Upload to YouTube
     const uploadResult = await youtubeUploader.uploadVideo({
       videoPath,
       title: metadata.title,
@@ -217,6 +187,9 @@ app.post('/api/upload-beat', upload.fields([
       tags: metadata.tags,
       categoryId: '10'
     });
+
+    // Clean up everything after successful upload
+    await deleteFiles(cleanupFiles);
 
     res.json({
       success: true,
@@ -232,10 +205,13 @@ app.post('/api/upload-beat', upload.fields([
 
   } catch (error) {
     console.error('Upload process failed:', error);
+
+    // Cleanup on error
+    await deleteFiles(cleanupFiles);
+
     res.status(500).json({ success: false, error: error.message });
   }
 });
-
 // YouTube OAuth routes
 app.get('/api/auth/youtube', (req, res) => {
   const authUrl = youtubeUploader.getAuthUrl();
