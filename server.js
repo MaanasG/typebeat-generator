@@ -10,6 +10,18 @@ const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 require('dotenv').config();
 
+// concurrency setup
+const asyncLib = require('async');
+
+const queue = asyncLib.queue(async (task, done) => {
+  try {
+    await task();
+    done();
+  } catch (err) {
+    done(err);
+  }
+}, 1);
+
 // Import services
 const VideoGenerator = require('./services/videoGenerator');
 const MetadataGenerator = require('./services/metadataGenerator');
@@ -138,8 +150,73 @@ const deleteFiles = async (filePaths) => {
 app.post('/api/upload-beat', upload.fields([
   { name: 'beatFile', maxCount: 1 },
   { name: 'coverImage', maxCount: 1 }
-]), async (req, res) => {
-  let cleanupFiles = []; // file deletion
+]), (req, res) => {
+  queue.push(async () => {
+    await handleUpload(req, res);
+  });
+});
+
+// YouTube OAuth routes
+app.get('/api/auth/youtube', (req, res) => {
+  const authUrl = youtubeUploader.getAuthUrl();
+  res.json({ authUrl });
+});
+
+app.post('/api/auth/youtube/callback', async (req, res) => {
+  try {
+    const { code } = req.body;
+    const tokens = await youtubeUploader.getTokensFromCode(code);
+    res.json({ success: true, message: 'Authentication successful' });
+  } catch (error) {
+    console.error('YouTube auth failed:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/auth/youtube/callback', async (req, res) => {
+  try {
+    const { code, error } = req.query;
+    
+    if (error) {
+      // redirect back to frontend with error
+      return res.redirect(`/?auth_error=${encodeURIComponent(error)}`);
+    }
+    
+    if (code) {
+      // exchange code for tokens
+      const tokens = await youtubeUploader.getTokensFromCode(code);
+      
+      // redirect back to frontend with success
+      res.redirect('/?auth_success=true');
+    } else {
+      res.redirect('/?auth_error=no_code_received');
+    }
+  } catch (error) {
+    console.error('YouTube auth failed:', error);
+    res.redirect(`/?auth_error=${encodeURIComponent(error.message)}`);
+  }
+});
+
+// testing
+
+app.get('/api/test-config', (req, res) => {
+  res.json({
+    status: 'Server running',
+    config: {
+      youtube_client_id: process.env.YOUTUBE_CLIENT_ID ? 'Set' : 'Missing',
+      youtube_client_secret: process.env.YOUTUBE_CLIENT_SECRET ? 'Set' : 'Missing',
+      youtube_redirect_uri: process.env.YOUTUBE_REDIRECT_URI
+    }
+  });
+});
+
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+});
+
+async function handleUpload(req, res) {
+  let cleanupFiles = [];
   try {
     const { beatTitle, tags, instagramLink, beatstarsLink, genre, manualBpm, manualKey, backgroundStyle } = req.body;
 
@@ -217,71 +294,9 @@ app.post('/api/upload-beat', upload.fields([
         tags: metadata.tags
       }
     });
-
   } catch (error) {
     console.error('Upload process failed:', error);
-
-    // Cleanup on error
     await deleteFiles(cleanupFiles);
-
     res.status(500).json({ success: false, error: error.message });
   }
-});
-// YouTube OAuth routes
-app.get('/api/auth/youtube', (req, res) => {
-  const authUrl = youtubeUploader.getAuthUrl();
-  res.json({ authUrl });
-});
-
-app.post('/api/auth/youtube/callback', async (req, res) => {
-  try {
-    const { code } = req.body;
-    const tokens = await youtubeUploader.getTokensFromCode(code);
-    res.json({ success: true, message: 'Authentication successful' });
-  } catch (error) {
-    console.error('YouTube auth failed:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-app.get('/api/auth/youtube/callback', async (req, res) => {
-  try {
-    const { code, error } = req.query;
-    
-    if (error) {
-      // redirect back to frontend with error
-      return res.redirect(`/?auth_error=${encodeURIComponent(error)}`);
-    }
-    
-    if (code) {
-      // exchange code for tokens
-      const tokens = await youtubeUploader.getTokensFromCode(code);
-      
-      // redirect back to frontend with success
-      res.redirect('/?auth_success=true');
-    } else {
-      res.redirect('/?auth_error=no_code_received');
-    }
-  } catch (error) {
-    console.error('YouTube auth failed:', error);
-    res.redirect(`/?auth_error=${encodeURIComponent(error.message)}`);
-  }
-});
-
-// testing
-
-app.get('/api/test-config', (req, res) => {
-  res.json({
-    status: 'Server running',
-    config: {
-      youtube_client_id: process.env.YOUTUBE_CLIENT_ID ? 'Set' : 'Missing',
-      youtube_client_secret: process.env.YOUTUBE_CLIENT_SECRET ? 'Set' : 'Missing',
-      youtube_redirect_uri: process.env.YOUTUBE_REDIRECT_URI
-    }
-  });
-});
-
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-});
+}
