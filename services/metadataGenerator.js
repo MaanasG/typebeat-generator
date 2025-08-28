@@ -6,69 +6,19 @@ const puppeteer = require('puppeteer');
 
 class MetadataGenerator {
 
+    
   async generateMetadata({ beatTitle, tags, genre, instagramLink, beatstarsLink, manualBpm, manualKey }) {
-    console.log('Generating metadata with:', { beatTitle, tags, genre, instagramLink, beatstarsLink, manualBpm, manualKey });
-    
-    let bpm = null;
-    let key = null;
-
-    // Check for manual values first (they take priority)
-    if (manualBpm !== null && manualBpm !== undefined && !isNaN(manualBpm)) {
-      bpm = manualBpm;
-      console.log('Using manual BPM:', bpm);
-    }
-    
-    if (manualKey !== null && manualKey !== undefined && manualKey.trim() !== '') {
-      key = manualKey.trim();
-      console.log('Using manual Key:', key);
-    }
-
-    // Only attempt scraping if we still don't have values AND we have a BeatStars link
-    const needsBpm = bpm === null || isNaN(bpm);
-    const needsKey = key === null || key === '';
-    
-    console.log('BPM/Key status:', { 
-      needsBpm, 
-      needsKey, 
-      hasBeatstarsLink: !!beatstarsLink,
-      manualBpm,
+    console.log('Generating metadata with provided values:', { 
+      beatTitle, 
+      tags, 
+      genre, 
+      manualBpm, 
       manualKey 
     });
-
-    if ((needsBpm || needsKey) && beatstarsLink) {
-      console.log('Attempting to scrape BeatStars data...');
-      try {
-        const scraped = await this.scrapeBeatStarsData(beatstarsLink);
-        
-        // Only use scraped values if we don't have manual ones
-        if (needsBpm && scraped.bpm) {
-          bpm = scraped.bpm;
-          console.log('Scraped BPM:', bpm);
-        }
-        if (needsKey && scraped.key) {
-          key = scraped.key;
-          console.log('Scraped Key:', key);
-        }
-      } catch (scrapeError) {
-        console.error('Scraping failed:', scrapeError);
-      }
-    } else {
-      console.log('Skipping scraping - manual values provided or no BeatStars link');
-    }
-
-    // Final check - if still missing BPM or Key, request manual input
-    if ((bpm === null || isNaN(bpm)) || (key === null || key === '')) {
-      console.log('BPM/Key still missing after scraping attempt:', { bpm, key });
-      return {
-        requiresManualInput: true,
-        missingData: {
-          bpm: bpm === null || isNaN(bpm),
-          key: key === null || key === ''
-        }
-      };
-    }
-
-    console.log('Final BPM/Key values:', { bpm, key });
+    
+    // Use the values directly - server has already resolved them
+    const bpm = manualBpm;
+    const key = manualKey;
 
     // Build YouTube metadata
     const title = beatTitle;
@@ -96,8 +46,7 @@ class MetadataGenerator {
     return {
       title,
       description,
-      tags: generatedTags.slice(0, 15),
-      requiresManualInput: false
+      tags: generatedTags.slice(0, 15)
     };
   }
 
@@ -473,6 +422,7 @@ class MetadataGenerator {
     // Remove duplicates and return
     return [...new Set(generatedTags)];
   }
+
 
   // Keep the old formatDescription method for backward compatibility if needed
   formatDescription(baseDescription, instagramLink, beatstarsLink) {

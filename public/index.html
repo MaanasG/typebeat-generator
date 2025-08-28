@@ -722,6 +722,25 @@
             };
 
             const performUpload = async () => {
+                await performUploadWithManualData();
+            };
+
+            const handleBpmKeySubmit = ({ bpm, key }) => {
+                const data = { bpm, key };
+                setManualBpmKey(data);
+                setPreScrapedData(data);
+                setShowBpmKeyModal(false);
+                setPendingSubmission(null);
+
+                // Use the data directly instead of waiting for state to update
+                setTimeout(() => {
+                    performUploadWithManualData(data);
+                }, 100);
+            };
+
+            const performUploadWithManualData = async (manualData = null) => {
+                const dataToUse = manualData || manualBpmKey;
+                
                 setIsProcessing(true);
                 setResult(null);
                 setErrors({});
@@ -737,21 +756,17 @@
                     formDataObj.append('tags', formData.tags);
                     formDataObj.append('backgroundStyle', formData.backgroundStyle);
                     
-                    
                     // Add manual BPM/Key if provided
-                    if (manualBpmKey.bpm) {
-                        formDataObj.append('manualBpm', manualBpmKey.bpm.toString());
+                    if (dataToUse.bpm) {
+                        formDataObj.append('manualBpm', dataToUse.bpm.toString());
                     }
-                    if (manualBpmKey.key) {
-                        formDataObj.append('manualKey', manualBpmKey.key);
+                    if (dataToUse.key) {
+                        formDataObj.append('manualKey', dataToUse.key);
                     }
-                    if (preScrapedData) {
-                        formDataObj.append('preScrapedData', JSON.stringify(preScrapedData));
-                    }   
 
-                    setProgress({ step: 'UPLOADING FILES...', percentage: 10 });
+                        setProgress({ step: 'UPLOADING FILES...', percentage: 10 });
 
-                    const response = await fetch(`${API_BASE}/upload-beat`, {
+                        const response = await fetch(`${API_BASE}/upload-beat`, {
                         method: 'POST',
                         body: formDataObj
                     });
@@ -769,14 +784,14 @@
                         setProgress({ step: 'COMPLETE!', percentage: 100 });
                         setResult(result.result);
                     } else if (result.scrapingFailed) {
-                        // ✅ scraping failed, ask for manual BPM/Key
+                        // Show modal for manual BPM/Key input
                         setIsProcessing(false);
                         setProgress({ step: '', percentage: 0 });
                         setShowBpmKeyModal(true);
-                        return; // stop here, wait for user input
+                        return;
                     } else {
                         throw new Error(result.error || 'Upload failed');
-}
+                    }
                     
                 } catch (error) {
                     console.error('Upload failed:', error);
@@ -785,18 +800,6 @@
                 } finally {
                     setIsProcessing(false);
                 }
-            };
-
-            const handleBpmKeySubmit = ({ bpm, key }) => {
-                const data = { bpm, key };
-                setManualBpmKey(data);
-                setPreScrapedData(data); // <-- NEW
-                setShowBpmKeyModal(false);
-                setPendingSubmission(null);
-
-                setTimeout(() => {
-                    performUpload();
-                }, 100);
             };
 
             const handleBpmKeyModalClose = () => {
@@ -1230,7 +1233,7 @@
                                     {isProcessing && (
                                         <div className="text-center py-12">
                                             <div className="text-6xl mb-8">⚡</div>
-                                            <h2 className="text-3xl font-bold text-white mb-8 uppercase tracking-wide">
+                                            <h2 className="text-3xl font-bold text-white mb-8 tracking-wide">
                                                 processing beat...
                                             </h2>
                                             <ProgressBar step={progress.step} percentage={progress.percentage} />
