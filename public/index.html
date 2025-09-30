@@ -17,7 +17,7 @@
         
         @font-face {
             font-family: 'abeatbykai';
-            src: url('./fonts/abeatbykai/ABEAKRG.TTF') format('truetype'); /* adjust extension if it's .otf or .woff */
+            src: url('./fonts/abeatbykai/ABEAKRG.TTF') format('truetype');
             font-weight: normal;
             font-style: normal;
             letter-spacing: -4px
@@ -42,7 +42,6 @@
             padding: 0;
         }
         
-        /* Vignette overlay for faded black border effect */
         body::before {
             content: '';
             position: fixed;
@@ -438,7 +437,6 @@
 
         const API_BASE = '/api';
 
-        // BPM/Key Input Modal Component
         const BpmKeyModal = ({ isOpen, onClose, onSubmit, initialBpm = '', initialKey = '', beatstarsLink = '' }) => {
             const [bpm, setBpm] = useState(initialBpm);
             const [key, setKey] = useState(initialKey);
@@ -563,11 +561,12 @@
                 beatFile: null,
                 coverImage: null,
                 beatTitle: '',
-                tags: '',                // NEW
+                tags: '',   
+                email: '',              
                 instagramLink: '',
                 beatstarsLink: '',
                 genre: 'hip-hop',
-                backgroundStyle: 'blurred' // NEW
+                backgroundStyle: 'blurred' 
             });
             const [preScrapedData, setPreScrapedData] = useState(null);
             const [isMuted, setIsMuted] = React.useState(true);
@@ -588,7 +587,6 @@
             const [isYouTubeAuthenticated, setIsYouTubeAuthenticated] = useState(false);
             const [authenticationStatus, setAuthenticationStatus] = useState('checking');
             
-            // BPM/Key Modal states
             const [showBpmKeyModal, setShowBpmKeyModal] = useState(false);
             const [manualBpmKey, setManualBpmKey] = useState({ bpm: null, key: null });
             const [pendingSubmission, setPendingSubmission] = useState(null);
@@ -664,6 +662,11 @@
                 }
                 if (!formData.tags.trim()) {
                     newErrors.tags = 'Type beat artists are required';
+                }
+                if (!formData.email.trim()) {
+                    newErrors.email = 'Email is required';
+                } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+                    newErrors.email = 'Please enter a valid email address';
                 }
                 if (!isYouTubeAuthenticated) {
                     newErrors.auth = 'Please authenticate with YouTube first';
@@ -750,6 +753,7 @@
                     formDataObj.append('beatFile', formData.beatFile);
                     formDataObj.append('coverImage', formData.coverImage);
                     formDataObj.append('beatTitle', formData.beatTitle);
+                    formDataObj.append('email', formData.email);           // ADD THIS LINE
                     formDataObj.append('instagramLink', formData.instagramLink);
                     formDataObj.append('beatstarsLink', formData.beatstarsLink);
                     formDataObj.append('genre', formData.genre);
@@ -764,9 +768,9 @@
                         formDataObj.append('manualKey', dataToUse.key);
                     }
 
-                        setProgress({ step: 'UPLOADING FILES...', percentage: 10 });
+                    setProgress({ step: 'UPLOADING FILES...', percentage: 10 });
 
-                        const response = await fetch(`${API_BASE}/upload-beat`, {
+                    const response = await fetch(`${API_BASE}/upload-beat`, {
                         method: 'POST',
                         body: formDataObj
                     });
@@ -784,7 +788,6 @@
                         setProgress({ step: 'COMPLETE!', percentage: 100 });
                         setResult(result.result);
                     } else if (result.scrapingFailed) {
-                        // Show modal for manual BPM/Key input
                         setIsProcessing(false);
                         setProgress({ step: '', percentage: 0 });
                         setShowBpmKeyModal(true);
@@ -1035,12 +1038,11 @@
                         className="credit-button"
                         style={{ top: "80px", position: "absolute" }}
                         onClick={() => setIsMuted(prev => !prev)}
-                        title={isMuted ? "Unmute" : "Mute"} // ← Tooltip text
+                        title={isMuted ? "Unmute" : "Mute"} 
                     >
                         {isMuted ? "🔇" : "🔊"}
                     </button>
                     
-                    {/* BPM/Key Modal */}
                     <BpmKeyModal
                         isOpen={showBpmKeyModal}
                         onClose={handleBpmKeyModalClose}
@@ -1051,7 +1053,6 @@
                     />
 
                     <div className="container mx-auto px-6 py-8 h-screen flex flex-col">
-                        {/* Logo Space */}
                         <div className="logo-space">
                             type beat video generator
                         </div>
@@ -1139,20 +1140,20 @@
                                             <div className="grid lg:grid-cols-3 gap-6 mb-8">
                                                 <div>
                                                     <label className="block text-sm font-semibold text-white mb-3 uppercase tracking-wide">
-                                                        Genre
+                                                        Email *
                                                     </label>
-                                                    <select
-                                                        value={formData.genre}
-                                                        onChange={(e) => handleInputChange('genre', e.target.value)}
+                                                    <input
+                                                        type="email"
+                                                        value={formData.email}
+                                                        onChange={(e) => handleInputChange('email', e.target.value)}
+                                                        placeholder="your@email.com"
                                                         className="floating-input w-full px-4 py-3 rounded-xl font-mono"
-                                                    >
-                                                        <option value="hip-hop">HIP HOP</option>
-                                                        <option value="trap">TRAP</option>
-                                                        <option value="drill">DRILL</option>
-                                                        <option value="r&b">R&B</option>
-                                                        <option value="pop">POP</option>
-                                                        <option value="afrobeat">AFROBEAT</option>
-                                                    </select>
+                                                    />
+                                                    {errors.email && (
+                                                        <div className="mt-2 p-2 error-display rounded text-sm">
+                                                            {errors.email}
+                                                        </div>
+                                                    )}
                                                 </div>
 
                                                 <div>
@@ -1254,9 +1255,11 @@
                                                         coverImage: null,
                                                         beatTitle: '',
                                                         tags: '',
+                                                        email: '', 
                                                         instagramLink: '',
                                                         beatstarsLink: '',
-                                                        genre: 'hip-hop'
+                                                        genre: 'hip-hop',
+                                                        backgroundStyle: 'blurred'
                                                     });
                                                     setManualBpmKey({ bpm: null, key: null });
                                                     setProgress({ step: '', percentage: 0 });
@@ -1301,10 +1304,9 @@
             </div>
         );
 
-        // About Us Page Component
+        // abt us
         const AboutPage = ({ onBack }) => (
             <div className="min-h-screen relative">
-                {/* Credit Button */}
                 <a 
                     href="https://linktr.ee/1mains" 
                     target="_blank" 
@@ -1320,7 +1322,6 @@
                 </a>
 
                 <div className="container mx-auto px-6 py-8 h-screen flex flex-col">
-                    {/* Header with back button */}
                     <div className="flex items-center justify-between mb-8">
                         <button
                             onClick={onBack}
@@ -1333,7 +1334,7 @@
                             about us
                         </div>
                         
-                        <div className="w-20"></div> {/* Spacer for centering */}
+                        <div className="w-20"></div> 
                     </div>
 
                     <div className="scrollable-content">
@@ -1421,7 +1422,7 @@
             </div>
         );
 
-        // Simple hash-based router
+        // hash-based router
         const useHistoryRouter = () => {
             const [route, setRoute] = React.useState(window.location.pathname || '/');
 
@@ -1445,7 +1446,7 @@
             const [started, setStarted] = React.useState(false);
             const { route, navigate } = useHistoryRouter();
 
-            // Handle routing
+            // routing
             if (route === '/about') {
                 return <AboutPage onBack={() => navigate('/')} />;
             }
@@ -1463,19 +1464,23 @@
     </script>
     <script>
     document.addEventListener("DOMContentLoaded", () => {
-        // List all your background videos here
         const videos = [
             "background_videos/stock-video-3.mp4",
+            "background_videos/stock-video-1.mp4",
+            "background_videos/stock-video-2.mp4",
             "background_videos/Kankan - Nun To Me.mp4",
             "background_videos/Slump6s - Jabawockeez ft. sgpwes.mp4",
-            "background_videos/iayze - Elon.mp4"
+            "background_videos/tana - kount bana.mp4",
+            "background_videos/tana - prolly.mp4",
+            "background_videos/nettspend - 2024 freestyle.mp4"
+
         ];
 
 
-        // Pick a random video
+        // random video
         const randomVideo = videos[Math.floor(Math.random() * videos.length)];
 
-        // Set it as the source
+        // set source
         const videoElement = document.getElementById("background-video");
         const sourceElement = videoElement.querySelector("source");
         sourceElement.src = randomVideo;

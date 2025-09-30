@@ -102,38 +102,6 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html')); 
 });
 
-/*
-//  endpoint to check BPM/Key from BeatStars link
-app.post('/api/check-beatstars-data', async (req, res) => {
-  try {
-    const { beatstarsLink } = req.body;
-    
-    if (!beatstarsLink) {
-      return res.json({ success: false, error: 'No BeatStars link provided' });
-    }
-
-    console.log('Checking BeatStars data for:', beatstarsLink);
-    
-    // Try to scrape the data
-    const { bpm, key, scrapingFailed } = await metadataGenerator.scrapeBeatStarsData(beatstarsLink);
-    
-    res.json({
-      success: true,
-      data: { bpm, key },
-      scrapingFailed: scrapingFailed || (!bpm && !key)
-    });
-
-  } catch (error) {
-    console.error('BeatStars data check failed:', error);
-    res.json({
-      success: false,
-      error: error.message,
-      scrapingFailed: true
-    });
-  }
-});
-*/
-
 // main upload endpoint
 
 const deleteFiles = async (filePaths) => {
@@ -174,7 +142,7 @@ app.post('/api/auth/youtube/callback', async (req, res) => {
   }
 });
 
-app.get('/api/auth/youtube/callback', async (req, res) => {
+app.get('/oauth2callback', async (req, res) => {
   try {
     const { code, error } = req.query;
     
@@ -219,7 +187,8 @@ app.listen(PORT, () => {
 async function handleUpload(req, res) {
   let cleanupFiles = [];
   try {
-    const { beatTitle, tags, instagramLink, beatstarsLink, genre, manualBpm, manualKey, backgroundStyle } = req.body;
+    // ⭐ CHANGE: Added 'email' to destructuring
+    const { beatTitle, tags, email, instagramLink, beatstarsLink, genre, manualBpm, manualKey, backgroundStyle } = req.body;
 
     const beatFile = req.files['beatFile'][0];
     const coverImage = req.files['coverImage'][0];
@@ -261,11 +230,12 @@ async function handleUpload(req, res) {
     });
     cleanupFiles.push(...tempFiles, videoPath);
 
-    // gen metadata
+    // ⭐ CHANGE: Added 'email' parameter
     const metadata = await metadataGenerator.generateMetadata({
       beatTitle,
       tags,
       genre,
+      email,
       instagramLink,
       beatstarsLink,
       manualBpm: bpm,
