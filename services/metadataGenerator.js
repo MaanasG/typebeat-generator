@@ -1,6 +1,4 @@
-// ==========================================
-// Enhanced metadataGenerator.js with Last.fm API Integration
-// ==========================================
+//  metadataGenerator.js with last.fm API 
 
 const puppeteer = require('puppeteer');
 const axios = require('axios');
@@ -82,10 +80,10 @@ class MetadataGenerator {
     }
   }
 
-  // Search for similar artists using Deezer API (no auth required!)
+  // similar artists with Deezer API (no auth)
   async getSimilarArtistsDeezer(artistName, limit = 5) {
     try {
-      // Search for artist
+      // search for artist
       const searchResponse = await axios.get('https://api.deezer.com/search/artist', {
         params: {
           q: artistName,
@@ -97,7 +95,7 @@ class MetadataGenerator {
         const artistId = searchResponse.data.data[0].id;
         console.log(`Found Deezer artist ID for ${artistName}: ${artistId}`);
 
-        // Get related artists
+        // get related artists
         const relatedResponse = await axios.get(`https://api.deezer.com/artist/${artistId}/related`, {
           params: {
             limit: limit
@@ -115,15 +113,14 @@ class MetadataGenerator {
     }
   }
 
-  // Get expanded artist list using multiple APIs with fallbacks
-  // Ensures even distribution of similar artists across all input artists
+  // api fallbacks
   async getExpandedArtistList(inputArtists, targetCount = 10) {
     const artists = inputArtists.split(',').map(name => name.trim()).filter(Boolean);
     const expandedArtists = new Set(artists.map(a => a.toLowerCase()));
     
     console.log(`Expanding artist list from ${artists.length} to ${targetCount} artists...`);
 
-    // Calculate how many similar artists to fetch per input artist
+    // # of similar artists
     const remainingSlots = targetCount - artists.length;
     const artistsPerInput = Math.floor(remainingSlots / artists.length);
     const extraSlots = remainingSlots % artists.length;
@@ -135,8 +132,6 @@ class MetadataGenerator {
       for (let i = 0; i < artists.length; i++) {
         const artist = artists[i];
         
-        // Calculate how many to fetch for this artist
-        // First N artists get the extra slot
         const limitForThisArtist = artistsPerInput + (i < extraSlots ? 1 : 0);
         
         if (limitForThisArtist === 0) {
@@ -148,19 +143,19 @@ class MetadataGenerator {
         
         let similarArtists = [];
 
-        // Try Last.fm first (most reliable and fast)
+        // lastfm
         if (this.lastfmApiKey) {
           console.log(`Trying Last.fm for ${artist}...`);
           similarArtists = await this.getSimilarArtistsLastfm(artist, limitForThisArtist);
         }
 
-        // Fallback to Deezer if Last.fm didn't work
+        // deezer fallback
         if (similarArtists.length === 0) {
           console.log(`Trying Deezer for ${artist}...`);
           similarArtists = await this.getSimilarArtistsDeezer(artist, limitForThisArtist);
         }
 
-        // Fallback to ListenBrainz if both failed
+        // listenbrainz fallback 
         if (similarArtists.length === 0) {
           console.log(`Trying ListenBrainz for ${artist}...`);
           similarArtists = await this.getSimilarArtistsListenBrainz(artist, limitForThisArtist);
@@ -169,7 +164,7 @@ class MetadataGenerator {
         if (similarArtists.length > 0) {
           console.log(`Found ${similarArtists.length} similar artists for ${artist}:`, similarArtists.join(', '));
           
-          // Add only the calculated number of artists
+          // add artists
           let added = 0;
           for (const name of similarArtists) {
             if (added >= limitForThisArtist) break;
@@ -184,7 +179,7 @@ class MetadataGenerator {
           console.log(`No similar artists found for ${artist}`);
         }
         
-        // Small delay to avoid rate limiting
+        // rate limit
         await new Promise(resolve => setTimeout(resolve, 250));
       }
     } catch (error) {
@@ -197,20 +192,16 @@ class MetadataGenerator {
     return result;
   }
 
-  // Enhanced tag generation with similar artists
   async generateEnhancedTags(inputArtists, genre = null) {
-    // Get expanded artist list including similar artists
     const allArtists = await this.getExpandedArtistList(inputArtists, 10);
     
     const tags = new Set();
     const currentYear = new Date().getFullYear();
     const lastYear = currentYear - 1;
 
-    // Generate tags for each artist
     allArtists.forEach(artist => {
       const cleanArtist = artist.replace(/\s+/g, '').toLowerCase();
       
-      // Core artist tags
       tags.add(`${artist} type beat`);
       tags.add(`${cleanArtist} type beat`);
       tags.add(`free ${artist} type beat`);
@@ -218,11 +209,10 @@ class MetadataGenerator {
       tags.add(`${artist} type beat ${currentYear}`);
       tags.add(`${artist} type beat free`);
       
-      // Add hashtag version
+      //add hashtag version
       tags.add(`#${cleanArtist}`);
     });
 
-    // Generate combination tags (top artists only)
     const topArtists = allArtists.slice(0, 5);
     for (let i = 0; i < topArtists.length; i++) {
       for (let j = i + 1; j < Math.min(i + 3, topArtists.length); j++) {
@@ -233,7 +223,7 @@ class MetadataGenerator {
       }
     }
 
-    // Genre-specific tags
+    // genre-specific tags
     if (genre) {
       tags.add(`${genre} type beat`);
       tags.add(`${genre} beat ${currentYear}`);
@@ -244,7 +234,7 @@ class MetadataGenerator {
       });
     }
 
-    // Generic tags
+    // generics
     const genericTags = [
       'type beat',
       `type beat ${currentYear}`,
@@ -269,9 +259,7 @@ class MetadataGenerator {
     return Array.from(tags);
   }
 
-  // Generate SEO-optimized description paragraph
   generateSEOParagraph(tags, maxTags = 50) {
-    // Take first maxTags and join with commas
     const selectedTags = tags.slice(0, maxTags);
     return selectedTags.join(', ');
   }

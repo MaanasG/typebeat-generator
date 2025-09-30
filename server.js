@@ -1,6 +1,4 @@
-// ==========================================
-// 2. server.js - Main Express Server
-// ==========================================
+// server.js - Main Express Server
 
 const express = require('express');
 const multer = require('multer');
@@ -39,9 +37,10 @@ const isProduction = process.env.NODE_ENV === 'production';
 
 cron.schedule(schedule, async () => {
   console.log(`Running ${isProduction ? 'production' : 'development'} cleanup...`);
-  await cleanupOldFiles(path.join(__dirname, 'uploads'), 60);
-  await cleanupOldFiles(path.join(__dirname, 'videos'), 60);
+  await cleanupOldFiles(uploadsDir, 60);
+  await cleanupOldFiles(videosDir, 60);
 });
+
 
 
 
@@ -230,7 +229,6 @@ async function handleUpload(req, res) {
     });
     cleanupFiles.push(...tempFiles, videoPath);
 
-    // ⭐ CHANGE: Added 'email' parameter
     const metadata = await metadataGenerator.generateMetadata({
       beatTitle,
       tags,

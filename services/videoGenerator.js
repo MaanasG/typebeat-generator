@@ -1,130 +1,180 @@
 const ffmpeg = require('fluent-ffmpeg');
 const ffmpegPath = require('ffmpeg-static');
 const path = require('path');
+const fs = require('fs').promises;
 
 ffmpeg.setFfmpegPath(ffmpegPath);
 
 class VideoGenerator {
-    async generateVideo({ audioPath, imagePath, outputDir, sessionId, backgroundStyle = 'blurred' }) {
-    return new Promise(async (resolve, reject) => {
-      const tempFiles = []; // Track all temp files for later cleanup
-      try {
-        const outputPath = path.join(outputDir, `video-${sessionId}.mp4`);
+  async generateVideo({ audioPath, imagePath, outputDir, sessionId, backgroundStyle = 'blurred' }) {
+    // No temp files needed anymore - single-pass processing!
+    const tempFiles = [];
+    
+    try {
+      const outputPath = path.join(outputDir, `video-${sessionId}.mp4`);
 
-        let finalImagePath;
-
-        if (backgroundStyle === 'black') {
-          const blackBackgroundPath = path.join(outputDir, `temp-black-${sessionId}.jpg`);
-          tempFiles.push(blackBackgroundPath);
-
-          await this.createBlackBackgroundImage({
-            originalImagePath: imagePath,
-            outputPath: blackBackgroundPath
-          });
-          finalImagePath = blackBackgroundPath;
-        } else {
-          const tempBlurredImagePath = path.join(outputDir, `temp-bg-${sessionId}.jpg`);
-          const tempCompositeImagePath = path.join(outputDir, `temp-composite-${sessionId}.jpg`);
-          tempFiles.push(tempBlurredImagePath, tempCompositeImagePath);
-
-          await this.createBlurredBackgroundImage({
-            imagePath,
-            outputPath: tempBlurredImagePath
-          });
-
-          await this.createCompositeImage({
-            originalImagePath: imagePath,
-            blurredImagePath: tempBlurredImagePath,
-            outputPath: tempCompositeImagePath
-          });
-
-          finalImagePath = tempCompositeImagePath;
-        }
-
-        await this.createVideoFromImage({
-          imagePath: finalImagePath,
+      if (backgroundStyle === 'black') {
+        // Direct approach - single FFmpeg command combining everything
+        await this.createVideoWithBlackBackground({
+          originalImagePath: imagePath,
           audioPath,
           outputPath
         });
-
-        console.log('Video generation completed');
-        // Return both the video and the temp files to delete later
-        resolve({ videoPath: outputPath, tempFiles });
-      } catch (err) {
-        console.error('Video generation error:', err);
-        reject(err);
+      } else {
+        // Combined approach - create video with blurred background in one step
+        await this.createVideoWithBlurredBackground({
+          imagePath,
+          audioPath,
+          outputPath
+        });
       }
+
+      console.log('Video generation completed');
+      // Return video path and empty tempFiles array (for backwards compatibility)
+      // The server.js will handle cleanup of the final video after upload
+      return { videoPath: outputPath, tempFiles };
+    } catch (err) {
+      console.error('Video generation error:', err);
+      throw err;
+    }
+  }
+
+  // Combined single-pass video generation with black background
+  createVideoWithBlackBackground({ originalImagePath, audioPath, outputPath }) {
+    return new Promise((resolve, reject) => {
+      ffmpeg()
+        .input(originalImagePath)
+        .inputOptions(['-loop 1'])
+        .input(audioPath)
+        .videoCodec('libx264')
+        .audioCodec('aac')
+        .outputOptions([
+          '-vf', 'scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black',
+          '-tune stillimage',
+          '-pix_fmt yuv420p',
+          '-shortest',
+          '-r 1',
+          '-b:a 192k',
+          '-preset ultrafast', // Faster encoding, less memory
+          '-threads 2', // Limit threads to reduce memory
+          '-bufsize 512k', // Limit buffer size
+          '-maxrate 2M' // Limit bitrate
+        ])
+        .output(outputPath)
+        .on('start', cmd => console.log('FFmpeg command:', cmd))
+        .on('progress', (progress) => {
+          if (progress.percent && !isNaN(progress.percent)) {
+            console.log(`Video: ${Math.round(progress.percent)}% done`);
+          }
+        })
+        .on('end', () => {
+          console.log('Video completed');
+          resolve();
+        })
+        .on('error', reject)
+        .run();
     });
-}
+  }
 
-createBlackBackgroundImage({ originalImagePath, outputPath }) {
-  return new Promise((resolve, reject) => {
-    ffmpeg()
-      .input(originalImagePath)
-      .outputOptions([
-        '-vf', 'scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black',
-        '-frames:v', '1'
-      ])
-      .output(outputPath)
-      .on('start', cmd => console.log('FFmpeg black background command:', cmd))
-      .on('end', resolve)
-      .on('error', reject)
-      .run();
-  });
-}
+  // Combined single-pass video generation with blurred background
+  createVideoWithBlurredBackground({ imagePath, audioPath, outputPath }) {
+    return new Promise((resolve, reject) => {
+      // Complex filter that does everything in one pass:
+      // 1. Split input into 2 streams
+      // 2. First stream: scale, crop, and blur for background
+      // 3. Second stream: scale to fit in center (70% of canvas)
+      // 4. Overlay the scaled original on top of blurred background
+      const filterComplex = [
+        '[0:v]split=2[bg][fg]',
+        '[bg]scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,gblur=sigma=20[blurred]',
+        '[fg]scale=1344:756:force_original_aspect_ratio=decrease[scaled]',
+        '[blurred][scaled]overlay=(W-w)/2:(H-h)/2'
+      ].join(';');
 
-  
+      ffmpeg()
+        .input(imagePath)
+        .inputOptions(['-loop 1'])
+        .input(audioPath)
+        .videoCodec('libx264')
+        .audioCodec('aac')
+        .outputOptions([
+          '-filter_complex', filterComplex,
+          '-tune stillimage',
+          '-pix_fmt yuv420p',
+          '-shortest',
+          '-r 1',
+          '-b:a 192k',
+          '-preset ultrafast', // Faster encoding, less memory
+          '-threads 2', // Limit threads
+          '-bufsize 512k', // Limit buffer
+          '-maxrate 2M' // Limit bitrate
+        ])
+        .output(outputPath)
+        .on('start', cmd => console.log('FFmpeg command:', cmd))
+        .on('progress', (progress) => {
+          if (progress.percent && !isNaN(progress.percent)) {
+            console.log(`Video: ${Math.round(progress.percent)}% done`);
+          }
+        })
+        .on('end', () => {
+          console.log('Video completed');
+          resolve();
+        })
+        .on('error', reject)
+        .run();
+    });
+  }
+
+  // Legacy methods kept for backward compatibility (but not used in optimized flow)
+  createBlackBackgroundImage({ originalImagePath, outputPath }) {
+    return new Promise((resolve, reject) => {
+      ffmpeg()
+        .input(originalImagePath)
+        .outputOptions([
+          '-vf', 'scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black',
+          '-frames:v', '1'
+        ])
+        .output(outputPath)
+        .on('start', cmd => console.log('FFmpeg black background command:', cmd))
+        .on('end', resolve)
+        .on('error', reject)
+        .run();
+    });
+  }
+
   createBlurredBackgroundImage({ imagePath, outputPath }) {
     return new Promise((resolve, reject) => {
       ffmpeg()
         .input(imagePath)
         .outputOptions([
           '-vf', 'scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,gblur=sigma=20',
-          '-frames:v', '1'  // Only generate 1 frame (single image)
+          '-frames:v', '1'
         ])
         .output(outputPath)
-        .on('start', (commandLine) => {
-          console.log('FFmpeg background image command:', commandLine);
-        })
-        .on('end', () => {
-          console.log('Blurred background image completed');
-          resolve();
-        })
-        .on('error', (err) => {
-          console.error('Background image FFmpeg error:', err);
-          reject(err);
-        })
+        .on('start', cmd => console.log('FFmpeg background image command:', cmd))
+        .on('end', resolve)
+        .on('error', reject)
         .run();
     });
   }
-  
+
   createCompositeImage({ originalImagePath, blurredImagePath, outputPath }) {
     return new Promise((resolve, reject) => {
-      // Scale original image to fit within 70% of canvas (1344x756) to ensure good margins
-      // This gives 288px margin on sides and 162px margin top/bottom
       ffmpeg()
         .input(blurredImagePath)
         .input(originalImagePath)
         .outputOptions([
           '-filter_complex', '[1:v]scale=1344:756:force_original_aspect_ratio=decrease[fg];[0:v][fg]overlay=(W-w)/2:(H-h)/2',
-          '-frames:v', '1'  // Only generate 1 frame (single image)
+          '-frames:v', '1'
         ])
         .output(outputPath)
-        .on('start', (commandLine) => {
-          console.log('FFmpeg composite image command:', commandLine);
-        })
-        .on('end', () => {
-          console.log('Composite image completed');
-          resolve();
-        })
-        .on('error', (err) => {
-          console.error('Composite image FFmpeg error:', err);
-          reject(err);
-        })
+        .on('start', cmd => console.log('FFmpeg composite image command:', cmd))
+        .on('end', resolve)
+        .on('error', reject)
         .run();
     });
   }
-  
+
   createVideoFromImage({ imagePath, audioPath, outputPath }) {
     return new Promise((resolve, reject) => {
       ffmpeg()
@@ -141,24 +191,14 @@ createBlackBackgroundImage({ originalImagePath, outputPath }) {
           '-b:a 192k'
         ])
         .output(outputPath)
-        .on('start', (commandLine) => {
-          console.log('FFmpeg video command:', commandLine);
-        })
+        .on('start', cmd => console.log('FFmpeg video command:', cmd))
         .on('progress', (progress) => {
           if (progress.percent && !isNaN(progress.percent)) {
             console.log(`Video: ${Math.round(progress.percent)}% done`);
-          } else {
-            console.log('Video: Processing...');
           }
         })
-        .on('end', () => {
-          console.log('Final video completed');
-          resolve();
-        })
-        .on('error', (err) => {
-          console.error('Video FFmpeg error:', err);
-          reject(err);
-        })
+        .on('end', resolve)
+        .on('error', reject)
         .run();
     });
   }
