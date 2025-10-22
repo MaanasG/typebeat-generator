@@ -264,6 +264,59 @@ class MetadataGenerator {
     return selectedTags.join(', ');
   }
 
+async analyzeAudioFile(audioPath) {
+  const { spawn } = require('child_process');
+  const path = require('path');
+  
+  return new Promise((resolve, reject) => {
+    const scriptPath = path.join(__dirname, 'analyze_audio.py');
+    
+    console.log(`Analyzing audio file: ${audioPath}`);
+    
+    const python = spawn('python3', [scriptPath, audioPath]);
+    
+    let dataString = '';
+    let errorString = '';
+    
+    python.stdout.on('data', (data) => {
+      dataString += data.toString();
+    });
+    
+    python.stderr.on('data', (data) => {
+      errorString += data.toString();
+    });
+    
+    python.on('close', (code) => {
+      if (code !== 0) {
+        console.error(`Python script error output: ${errorString}`);
+        reject(new Error(`Audio analysis failed with code ${code}`));
+        return;
+      }
+      
+      try {
+        const result = JSON.parse(dataString.trim());
+        
+        if (result.error) {
+          console.error(`Audio analysis error: ${result.error}`);
+          resolve({ bpm: null, key: null });
+        } else {
+          console.log(`Audio analysis successful: BPM=${result.bpm}, Key=${result.key}`);
+          resolve({ bpm: result.bpm, key: result.key });
+        }
+      } catch (error) {
+        console.error('Failed to parse audio analysis result:', error);
+        console.error('Raw output:', dataString);
+        reject(new Error('Failed to parse audio analysis result'));
+      }
+    });
+    
+    python.on('error', (error) => {
+      console.error('Failed to start Python process:', error);
+      reject(new Error(`Failed to start audio analysis: ${error.message}`));
+    });
+  });
+}
+
 async generateMetadata({ beatTitle, tags, genre, email, instagramLink, beatstarsLink, manualBpm, manualKey }) {
   console.log('Generating metadata with provided values:', { 
     beatTitle, 
@@ -311,7 +364,7 @@ async generateMetadata({ beatTitle, tags, genre, email, instagramLink, beatstars
   };
 }
 
-  async scrapeBeatStarsData(beatstarsLink, maxRetries = 3) {
+  async scrapeBeatStarsData(beatstarsLink, maxRetries = 2) {
     let browser;
     let attempt = 0;
 
@@ -320,301 +373,220 @@ async generateMetadata({ beatTitle, tags, genre, email, instagramLink, beatstars
       try {
         if (!beatstarsLink) return { bpm: null, key: null };
 
-        console.log(`Attempt ${attempt}/${maxRetries} - Scraping BeatStars page: ${beatstarsLink}`);
+        console.log(`\n=== Attempt ${attempt}/${maxRetries} ===`);
+        console.log(`Scraping: ${beatstarsLink}`);
 
+        // Use puppeteer-extra with stealth plugin if available, otherwise standard puppeteer
         browser = await puppeteer.launch({
-          headless: true,
+          headless: false, // Try visible mode first for debugging
           args: [
             '--no-sandbox',
             '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-accelerated-2d-canvas',
-            '--no-first-run',
-            '--no-zygote',
-            '--single-process',
-            '--disable-gpu',
-            '--disable-web-security',
-            '--disable-features=VizDisplayCompositor',
-            '--disable-background-timer-throttling',
-            '--disable-backgrounding-occluded-windows',
-            '--disable-renderer-backgrounding'
+            '--disable-blink-features=AutomationControlled', // Hide automation
+            '--disable-features=IsolateOrigins,site-per-process',
+            '--window-size=1920,1080'
           ],
-          timeout: 60000
+          timeout: 60000,
+          defaultViewport: null
         });
 
         const page = await browser.newPage();
-        
+
+        // More realistic browser fingerprint
+        await page.evaluateOnNewDocument(() => {
+          // Override the navigator.webdriver property
+          Object.defineProperty(navigator, 'webdriver', {
+            get: () => false,
+          });
+
+          // Override the permissions API
+          const originalQuery = window.navigator.permissions.query;
+          window.navigator.permissions.query = (parameters) => (
+            parameters.name === 'notifications' ?
+              Promise.resolve({ state: Notification.permission }) :
+              originalQuery(parameters)
+          );
+
+          // Add chrome object
+          window.chrome = {
+            runtime: {}
+          };
+        });
+
         await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
         await page.setExtraHTTPHeaders({
-          'Accept-Language': 'en-US,en;q=0.9'
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+          'Accept-Encoding': 'gzip, deflate, br',
+          'Connection': 'keep-alive',
+          'Upgrade-Insecure-Requests': '1'
         });
+
+        let bpm = null;
+        let key = null;
+
+        console.log('Navigating to page...');
         
-        await page.setViewport({ width: 1280, height: 800 });
-
-        page.on('error', (err) => {
-          console.error('Page error:', err.message);
+        // Simple navigation with long timeout
+        const response = await page.goto(beatstarsLink, {
+          waitUntil: 'networkidle0',
+          timeout: 60000
         });
 
-        page.on('pageerror', (err) => {
-          console.error('Page script error:', err.message);
+        console.log(`Response status: ${response?.status()}`);
+        
+        // Check if we got blocked
+        const pageTitle = await page.title();
+        console.log(`Page title: ${pageTitle}`);
+        
+        const url = page.url();
+        console.log(`Current URL: ${url}`);
+
+        // Take a screenshot to see what we got
+        await page.screenshot({ 
+          path: `beatstars-loaded-${Date.now()}.png`,
+          fullPage: false 
+        });
+        console.log('Screenshot saved');
+
+        // Check if page has actual content
+        const bodyContent = await page.evaluate(() => {
+          return {
+            hasBody: !!document.body,
+            bodyLength: document.body?.innerHTML?.length || 0,
+            bodyText: document.body?.innerText?.substring(0, 200) || ''
+          };
         });
 
-        try {
-          await page.goto(beatstarsLink, { 
-            waitUntil: ['load', 'domcontentloaded'],
-            timeout: 45000 
-          });
+        console.log('Body content:', bodyContent);
 
-          await page.waitForTimeout(5000);
+        if (bodyContent.bodyLength < 100) {
+          throw new Error('Page appears to be empty or blocked');
+        }
 
-          const pageTitle = await page.title();
-          console.log(`Page loaded: ${pageTitle}`);
+        // Wait extra time for Angular to load
+        console.log('Waiting for Angular to initialize...');
+        await page.waitForTimeout(5000);
 
-          if (!pageTitle || pageTitle.toLowerCase().includes('error')) {
-            throw new Error('Page failed to load properly');
-          }
+        // Check what elements we have
+        const elementCheck = await page.evaluate(() => {
+          return {
+            socialLines: document.querySelectorAll('.social-interaction-line').length,
+            labels: document.querySelectorAll('.label').length,
+            values: document.querySelectorAll('.value').length,
+            allClasses: Array.from(new Set(
+              Array.from(document.querySelectorAll('*'))
+                .flatMap(el => Array.from(el.classList))
+                .filter(cls => cls.includes('bpm') || cls.includes('key') || cls.includes('stat') || cls.includes('profile'))
+            )).slice(0, 20)
+          };
+        });
 
-          let bpm = null;
-          let key = null;
+        console.log('Element check:', elementCheck);
 
-          const selectorData = await page.evaluate(() => {
-            try {
-              const possibleBpmSelectors = [
-                '[data-testid="bpm"]',
-                '[data-cy="bpm"]',
-                '.beat-bpm',
-                '.track-bpm',
-                '[class*="bpm"]',
-                '[id*="bpm"]'
-              ];
-
-              const possibleKeySelectors = [
-                '[data-testid="key"]',
-                '[data-cy="key"]',
-                '.beat-key',
-                '.track-key',
-                '[class*="key"]',
-                '[id*="key"]'
-              ];
-
-              let foundBpm = null;
-              let foundKey = null;
-
-              for (const selector of possibleBpmSelectors) {
-                const element = document.querySelector(selector);
-                if (element) {
-                  const text = element.textContent || element.innerText || '';
-                  const bpmMatch = text.match(/(\d+)/);
-                  if (bpmMatch) {
-                    foundBpm = parseInt(bpmMatch[1]);
-                    break;
-                  }
-                }
-              }
-
-              for (const selector of possibleKeySelectors) {
-                const element = document.querySelector(selector);
-                if (element) {
-                  const text = element.textContent || element.innerText || '';
-                  const keyMatch = text.match(/([A-G][#♯b♭]?\s*(?:major|minor|maj|min|m)?)/i);
-                  if (keyMatch) {
-                    foundKey = keyMatch[1].trim();
-                    break;
-                  }
-                }
-              }
-
-              return { bpm: foundBpm, key: foundKey };
-            } catch (e) {
-              return { bpm: null, key: null, error: e.message };
-            }
-          });
-
-          bpm = selectorData.bpm;
-          key = selectorData.key;
-
-          if (!bpm || !key) {
-            const textData = await page.evaluate(() => {
-              try {
-                const allText = document.body.innerText || '';
-                
-                let foundBpm = null;
-                let foundKey = null;
-
-                const bpmPatterns = [
-                  /(\d+)\s*bpm/i,
-                  /bpm\s*:?\s*(\d+)/i,
-                  /tempo\s*:?\s*(\d+)/i
-                ];
-
-                for (const pattern of bpmPatterns) {
-                  const match = allText.match(pattern);
-                  if (match) {
-                    foundBpm = parseInt(match[1]);
-                    break;
-                  }
-                }
-
-                const keyPatterns = [
-                  /key\s*:?\s*([A-G][#♯b♭]?\s*(?:major|minor|maj|min|m)?)/gi,
-                  /([A-G][#♯b♭]?)\s+(major|minor|maj|min)/gi,
-                  /([A-G][#♯b♭]?m)\b/g
-                ];
-
-                for (const pattern of keyPatterns) {
-                  const matches = [...allText.matchAll(pattern)];
-                  if (matches.length > 0) {
-                    const validKeys = matches.filter(match => {
-                      const fullMatch = match[0];
-                      const lower = fullMatch.toLowerCase();
-                      return !lower.includes('email') && 
-                             !lower.includes('gmail') && 
-                             !lower.includes('member') &&
-                             !lower.includes('comment') &&
-                             !lower.includes('stream') &&
-                             fullMatch.length < 20;
-                    });
-                    
-                    if (validKeys.length > 0) {
-                      foundKey = validKeys[0][0].trim();
-                      break;
-                    }
-                  }
-                }
-
-                return { bpm: foundBpm, key: foundKey, textLength: allText.length };
-              } catch (e) {
-                return { bpm: null, key: null, textLength: 0, error: e.message };
-              }
-            });
-
-            if (!bpm) bpm = textData.bpm;
-            if (!key) key = textData.key;
-          }
-
-          console.log(`Data extraction result:`, { bpm, key });
-
-          if ((!bpm || !key)) {
-            console.log('Trying script tag and API data analysis...');
+        // Try to find BPM and Key
+        console.log('Attempting to scrape beat data...');
+        const beatData = await page.evaluate(() => {
+          let data = { bpm: null, key: null, debug: [] };
+          
+          try {
+            // Strategy 1: Look for social-interaction-line
+            const lines = document.querySelectorAll('.social-interaction-line');
+            data.debug.push(`Found ${lines.length} .social-interaction-line elements`);
             
-            const scriptData = await page.evaluate(() => {
-              try {
-                let results = { bpm: null, key: null };
+            lines.forEach((line, index) => {
+              const label = line.querySelector('.label');
+              const value = line.querySelector('.value');
+              
+              if (label && value) {
+                const labelText = label.textContent.trim().toUpperCase();
+                const valueText = value.textContent.trim();
                 
-                if (window.__INITIAL_STATE__ || window.__REDUX_STORE__ || window.__NEXT_DATA__) {
-                  const stateData = window.__INITIAL_STATE__ || window.__REDUX_STORE__ || window.__NEXT_DATA__;
-                  const stateStr = JSON.stringify(stateData);
-                  
-                  const bpmMatch = stateStr.match(/"bpm"\s*:\s*(\d+)/i);
-                  const keyMatch = stateStr.match(/"key"\s*:\s*"([^"]+)"/i);
-                  
-                  if (bpmMatch) results.bpm = parseInt(bpmMatch[1]);
-                  if (keyMatch) results.key = keyMatch[1];
-                }
+                data.debug.push(`Line ${index}: "${labelText}" = "${valueText}"`);
                 
-                const scripts = Array.from(document.querySelectorAll('script'));
-                for (const script of scripts) {
-                  const content = script.textContent || '';
-                  
-                  if (content.includes('bpm') || content.includes('key')) {
-                    const jsonMatches = content.match(/\{[^{}]*(?:bpm|key)[^{}]*\}/gi) || [];
-                    
-                    for (const jsonStr of jsonMatches) {
-                      try {
-                        const data = JSON.parse(jsonStr);
-                        if (data.bpm && !results.bpm) results.bpm = parseInt(data.bpm);
-                        if (data.key && !results.key) results.key = data.key;
-                      } catch (e) {
-                        const bpmMatch = jsonStr.match(/bpm["\s:]*(\d+)/i);
-                        const keyMatch = jsonStr.match(/key["\s:]*["']?([A-G][#♯b♭]?\s*(?:major|minor|maj|min|m)?)/i);
-                        
-                        if (bpmMatch && !results.bpm) results.bpm = parseInt(bpmMatch[1]);
-                        if (keyMatch && !results.key) results.key = keyMatch[1];
-                      }
-                    }
+                if (labelText === 'BPM') {
+                  const bpmNum = parseInt(valueText);
+                  if (!isNaN(bpmNum) && bpmNum >= 40 && bpmNum <= 200) {
+                    data.bpm = bpmNum;
+                    data.debug.push(`✓ Found BPM: ${bpmNum}`);
+                  }
+                } else if (labelText === 'KEY') {
+                  if (valueText.match(/^[A-G][#♯b♭]?m?(?:ajor|inor)?$/i)) {
+                    data.key = valueText;
+                    data.debug.push(`✓ Found Key: ${valueText}`);
                   }
                 }
-                
-                return results;
-              } catch (e) {
-                return { bpm: null, key: null, error: e.message };
               }
             });
 
-            if (scriptData.bpm && !bpm) bpm = scriptData.bpm;
-            if (scriptData.key && !key) key = scriptData.key;
-          }
-
-          if (!bpm || !key) {
-            const beatId = beatstarsLink.match(/-(\d+)(?:\?|$)/);
-            if (beatId) {
-              console.log(`Trying direct API call for beat ID: ${beatId[1]}`);
+            // Strategy 2: Search all text if nothing found
+            if (!data.bpm || !data.key) {
+              data.debug.push('Trying fallback text search...');
               
-              try {
-                const apiResponse = await page.evaluate(async (id) => {
-                  try {
-                    const response = await fetch(`https://api.beatstars.com/beat/${id}`, {
-                      headers: {
-                        'Accept': 'application/json',
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-                      }
-                    });
-                    
-                    if (response.ok) {
-                      const data = await response.json();
-                      return { 
-                        bpm: data.bpm || null, 
-                        key: data.key || null,
-                        success: true 
-                      };
-                    }
-                  } catch (e) {
-                    return { bpm: null, key: null, success: false, error: e.message };
-                  }
-                  return { bpm: null, key: null, success: false };
-                }, beatId[1]);
-
-                if (apiResponse.success) {
-                  if (apiResponse.bpm && !bpm) bpm = apiResponse.bpm;
-                  if (apiResponse.key && !key) key = apiResponse.key;
-                  console.log('API response:', apiResponse);
+              const allText = document.body.innerText;
+              
+              // Look for BPM pattern
+              const bpmMatch = allText.match(/BPM[:\s]*(\d{2,3})|(\d{2,3})[:\s]*BPM/i);
+              if (bpmMatch && !data.bpm) {
+                const num = parseInt(bpmMatch[1] || bpmMatch[2]);
+                if (num >= 40 && num <= 200) {
+                  data.bpm = num;
+                  data.debug.push(`✓ Found BPM from text: ${num}`);
                 }
-              } catch (apiError) {
-                console.log('API call failed:', apiError.message);
+              }
+
+              // Look for Key pattern
+              const keyMatch = allText.match(/Key[:\s]*([A-G][#♯b♭]?m?(?:ajor|inor)?)/i);
+              if (keyMatch && !data.key) {
+                data.key = keyMatch[1];
+                data.debug.push(`✓ Found Key from text: ${keyMatch[1]}`);
               }
             }
-          }
 
-          console.log(`Scraped BeatStars data: BPM=${bpm}, Key=${key}`);
+          } catch (e) {
+            data.debug.push(`Error: ${e.message}`);
+          }
+          
+          return data;
+        });
+
+        console.log('Scraping result:', beatData);
+        beatData.debug.forEach(msg => console.log(`  ${msg}`));
+
+        bpm = beatData.bpm;
+        key = beatData.key;
+
+        // Keep browser open for 5 seconds so you can see what happened
+        console.log('Keeping browser open for 5 seconds for inspection...');
+        await page.waitForTimeout(5000);
+
+        await browser.close();
+        browser = null;
+
+        if (bpm || key) {
+          console.log(`✓ Success! BPM=${bpm}, Key=${key}`);
           return { bpm, key };
-
-        } catch (navigationError) {
-          console.error(`Navigation error on attempt ${attempt}:`, navigationError.message);
-          if (attempt === maxRetries) {
-            throw navigationError;
-          }
-          continue;
+        } else {
+          throw new Error('Could not find BPM or Key data on page');
         }
 
       } catch (error) {
-        console.error(`Attempt ${attempt} failed:`, error.message);
+        console.error(`✗ Attempt ${attempt} failed:`, error.message);
         
-        if (attempt === maxRetries) {
-          console.error('All retry attempts failed');
-          return { bpm: null, key: null, scrapingFailed: true };
-        }
-        
-        await new Promise(resolve => setTimeout(resolve, 2000 * attempt));
-        
-      } finally {
         if (browser) {
           try {
             await browser.close();
-          } catch (closeError) {
-            console.error('Error closing browser:', closeError.message);
-          }
+          } catch (e) {}
           browser = null;
         }
+        
+        if (attempt === maxRetries) {
+          console.error('=== All attempts failed ===');
+          return { bpm: null, key: null, scrapingFailed: true };
+        }
+        
+        console.log(`Waiting before retry...`);
+        await new Promise(resolve => setTimeout(resolve, 3000));
       }
     }
 

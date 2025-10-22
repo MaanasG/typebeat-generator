@@ -682,6 +682,16 @@
                 if (!validateForm()) {
                     return;
                 }
+
+                // If BeatStars link exists but no manual data, show modal
+                if (formData.beatstarsLink && !manualBpmKey.bpm && !manualBpmKey.key) {
+                    setShowBpmKeyModal(true);
+                    return;
+                }
+
+                // Proceed with upload
+                await performUpload();
+            };
 /*
                 // Check if we need BPM/Key data and BeatStars link exists
                 if (formData.beatstarsLink && !manualBpmKey.bpm && !manualBpmKey.key) {
@@ -720,9 +730,7 @@
                     }
                 }
 */
-                // Proceed with upload
-                await performUpload();
-            };
+
 
             const performUpload = async () => {
                 await performUploadWithManualData();

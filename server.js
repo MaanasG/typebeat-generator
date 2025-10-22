@@ -200,7 +200,26 @@ async function handleUpload(req, res) {
     let bpm = manualBpm?.trim() ? parseInt(manualBpm.trim(), 10) : null;
     let key = manualKey?.trim() || null;
 
+    // If manual values not provided, analyze the audio file
+    if (!bpm || isNaN(bpm) || !key) {
+      console.log('Analyzing audio file for BPM and Key...');
+      try {
+        const analyzed = await metadataGenerator.analyzeAudioFile(beatFile.path);
+        if ((!bpm || isNaN(bpm)) && analyzed.bpm) {
+          bpm = analyzed.bpm;
+          console.log(`Detected BPM from audio: ${bpm}`);
+        }
+        if (!key && analyzed.key) {
+          key = analyzed.key;
+          console.log(`Detected Key from audio: ${key}`);
+        }
+      } catch (analyzeError) {
+        console.error('Audio analysis failed:', analyzeError);
+      }
+    }
+
     if ((!bpm || isNaN(bpm) || !key) && beatstarsLink) {
+      console.log('Trying BeatStars scraping as fallback...');
       try {
         const scraped = await metadataGenerator.scrapeBeatStarsData(beatstarsLink);
         if ((!bpm || isNaN(bpm)) && scraped.bpm) bpm = scraped.bpm;
@@ -208,15 +227,6 @@ async function handleUpload(req, res) {
       } catch (scrapeError) {
         console.error('Scraping failed:', scrapeError);
       }
-    }
-
-    if (!bpm || !key || isNaN(bpm)) {
-      await deleteFiles(cleanupFiles);
-      return res.json({
-        success: false,
-        scrapingFailed: true,
-        message: 'Could not auto-detect BPM and Key. Please provide them manually.'
-      });
     }
 
     // vid gen
