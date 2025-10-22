@@ -186,8 +186,7 @@ app.listen(PORT, () => {
 async function handleUpload(req, res) {
   let cleanupFiles = [];
   try {
-    // ⭐ CHANGE: Added 'email' to destructuring
-    const { beatTitle, tags, email, instagramLink, beatstarsLink, genre, manualBpm, manualKey, backgroundStyle } = req.body;
+    const { beatTitle, tags, email, instagramLink, beatstarsLink, genre, manualBpm, manualKey, backgroundStyle, scheduledPublishTime   } = req.body;
 
     const beatFile = req.files['beatFile'][0];
     const coverImage = req.files['coverImage'][0];
@@ -256,8 +255,10 @@ async function handleUpload(req, res) {
       title: metadata.title,
       description: metadata.description,
       tags: metadata.tags,
-      categoryId: '10'
+      categoryId: '10',
+      scheduledPublishTime: scheduledPublishTime || null 
     });
+
 
     // Clean up everything after successful upload
     await deleteFiles(cleanupFiles);

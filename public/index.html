@@ -292,7 +292,6 @@
             width: 100px;
         }
         
-        /* Modal/Popup Styles */
         .modal-overlay {
             position: fixed;
             top: 0;
@@ -566,7 +565,9 @@
                 instagramLink: '',
                 beatstarsLink: '',
                 genre: 'hip-hop',
-                backgroundStyle: 'blurred' 
+                backgroundStyle: 'blurred', 
+                schedulePublish: false,      
+                scheduledDateTime: ''  
             });
             const [preScrapedData, setPreScrapedData] = useState(null);
             const [isMuted, setIsMuted] = React.useState(true);
@@ -683,7 +684,7 @@
                     return;
                 }
 
-                // If BeatStars link exists but no manual data, show modal
+                // if BeatStars link exists but no manual data, show modal
                 if (formData.beatstarsLink && !manualBpmKey.bpm && !manualBpmKey.key) {
                     setShowBpmKeyModal(true);
                     return;
@@ -693,7 +694,6 @@
                 await performUpload();
             };
 /*
-                // Check if we need BPM/Key data and BeatStars link exists
                 if (formData.beatstarsLink && !manualBpmKey.bpm && !manualBpmKey.key) {
                     // First try to auto-scrape, if it fails, show modal
                     try {
@@ -743,7 +743,6 @@
                 setShowBpmKeyModal(false);
                 setPendingSubmission(null);
 
-                // Use the data directly instead of waiting for state to update
                 setTimeout(() => {
                     performUploadWithManualData(data);
                 }, 100);
@@ -768,6 +767,11 @@
                     formDataObj.append('tags', formData.tags);
                     formDataObj.append('backgroundStyle', formData.backgroundStyle);
                     
+                    if (formData.schedulePublish && formData.scheduledDateTime) {
+                    const scheduledTime = new Date(formData.scheduledDateTime).toISOString();
+                    formDataObj.append('scheduledPublishTime', scheduledTime);
+                    }
+
                     // Add manual BPM/Key if provided
                     if (dataToUse.bpm) {
                         formDataObj.append('manualBpm', dataToUse.bpm.toString());
@@ -1222,7 +1226,37 @@
                                                     </div>
                                                 </div>
                                             )}
-
+                                            <div className="mb-6">
+                                            <label className="flex items-center text-white mb-3">
+                                                <input
+                                                type="checkbox"
+                                                checked={formData.schedulePublish}
+                                                onChange={(e) => handleInputChange('schedulePublish', e.target.checked)}
+                                                className="mr-3 w-5 h-5"
+                                                />
+                                                <span className="font-semibold uppercase tracking-wide">
+                                                Schedule for later
+                                                </span>
+                                            </label>
+                                            
+                                            {formData.schedulePublish && (
+                                                <div className="mt-3">
+                                                <label className="block text-sm font-semibold text-white mb-2 uppercase tracking-wide">
+                                                    Publish Date & Time
+                                                </label>
+                                                <input
+                                                    type="datetime-local"
+                                                    value={formData.scheduledDateTime}
+                                                    onChange={(e) => handleInputChange('scheduledDateTime', e.target.value)}
+                                                    min={new Date().toISOString().slice(0, 16)}
+                                                    className="floating-input w-full px-4 py-3 rounded-xl font-mono"
+                                                />
+                                                <p className="text-white/50 text-xs mt-2 uppercase tracking-wide">
+                                                    Video will be private until scheduled time
+                                                </p>
+                                                </div>
+                                            )}
+                                            </div>
                                             {errors.submit && (
                                                 <div className="mb-6 p-4 error-display rounded-lg">
                                                     <p className="font-medium">{errors.submit}</p>

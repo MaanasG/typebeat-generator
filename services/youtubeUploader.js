@@ -99,25 +99,35 @@ class YouTubeUploader {
     }
   }
 
-  async uploadVideo({ videoPath, title, description, tags, categoryId = '10' }) {
+  async uploadVideo({ videoPath, title, description, tags, categoryId = '10', scheduledPublishTime = null }) {
     try {
-      // Ensure we have valid tokens
       await this.refreshTokensIfNeeded();
 
       const fileSize = fs.statSync(videoPath).size;
       
+      // Determine privacy status and publish time
+      let privacyStatus = 'public';
+      let publishAt = null;
+      
+      if (scheduledPublishTime) {
+        privacyStatus = 'private';
+        publishAt = scheduledPublishTime;
+        console.log(`Video will be scheduled to publish at: ${publishAt}`);
+      }
+      
       const requestBody = {
         snippet: {
-          title: title.substring(0, 100), // YouTube title limit
-          description: description.substring(0, 5000), // YouTube description limit
-          tags: tags.slice(0, 15), // YouTube allows max 15 tags
+          title: title.substring(0, 100),
+          description: description.substring(0, 5000),
+          tags: tags.slice(0, 15),
           categoryId: categoryId,
           defaultLanguage: 'en',
           defaultAudioLanguage: 'en'
         },
         status: {
-          privacyStatus: 'public', // or 'private', 'unlisted'
-          selfDeclaredMadeForKids: false
+          privacyStatus: privacyStatus,
+          selfDeclaredMadeForKids: false,
+          ...(publishAt && { publishAt: publishAt })
         }
       };
 
@@ -136,12 +146,16 @@ class YouTubeUploader {
       });
 
       console.log(`Upload successful! Video ID: ${response.data.id}`);
+      if (publishAt) {
+        console.log(`Scheduled to publish at: ${publishAt}`);
+      }
 
       return {
         videoId: response.data.id,
         url: `https://youtube.com/watch?v=${response.data.id}`,
         title: response.data.snippet.title,
-        publishedAt: response.data.snippet.publishedAt
+        publishedAt: response.data.snippet.publishedAt,
+        scheduledPublishTime: publishAt || null
       };
 
     } catch (error) {
