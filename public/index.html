@@ -415,16 +415,26 @@
             }
         }
 
+        .option-button {
+            backdrop-filter: blur(10px);
+            background: rgba(255, 255, 255, 0.05);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            transition: all 0.3s ease;
+        }
+        
+        .option-button.selected {
+            background: rgba(99, 102, 241, 0.3);
+            border-color: rgba(99, 102, 241, 0.6);
+        }
+        
+        .option-button:hover:not(.selected) {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.3);
+        }
+
     </style>
 </head>
 <body>
-    <!-- Video Background -->
-    
-    <!-- <video autoplay muted loop class="video-background">
-        <source src="fazobackground.mp4" type="video/mp4">
-        <div class="fixed inset-0 bg-gradient-to-br from-gray-900 via-purple-900 to-indigo-900"></div>
-    </video> -->
-    
     <video id="background-video" autoplay muted loop class="video-background">
         <source type="video/mp4">
     </video>
@@ -440,10 +450,6 @@
             const [bpm, setBpm] = useState(initialBpm);
             const [key, setKey] = useState(initialKey);
             const [isChecking, setIsChecking] = useState(false);
-            
-            <p className="text-white/70 text-sm uppercase tracking-wide">
-                Auto-detect failed, please enter manually
-            </p>
 
             const handleSubmit = () => {
                 onSubmit({ bpm: bpm ? parseInt(bpm) : null, key: key || null });
@@ -555,7 +561,7 @@
             );
         };
 
-            const BeatUploaderApp = () => {
+        const BeatUploaderApp = () => {
             const [formData, setFormData] = useState({
                 beatFile: null,
                 coverImage: null,
@@ -567,10 +573,14 @@
                 genre: 'hip-hop',
                 backgroundStyle: 'blurred', 
                 schedulePublish: false,      
-                scheduledDateTime: ''  
+                scheduledDateTime: '',
+                generateDescription: false
             });
             const [preScrapedData, setPreScrapedData] = useState(null);
             const [isMuted, setIsMuted] = React.useState(true);
+            
+            const [uploadMode, setUploadMode] = useState('youtube');
+            
             React.useEffect(() => {
                 const videoElement = document.getElementById("background-video");
                 if (videoElement) {
@@ -594,6 +604,17 @@
 
             const beatFileRef = useRef();
             const coverImageRef = useRef();
+
+            useEffect(() => {
+                const handleBeforeUnload = () => {
+                    if (result?.sessionId && result?.downloadOnly) {
+                        navigator.sendBeacon(`${API_BASE}/cleanup-video/${result.sessionId}`);
+                    }
+                };
+
+                window.addEventListener('beforeunload', handleBeforeUnload);
+                return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+            }, [result]);
 
             useEffect(() => {
                 const urlParams = new URLSearchParams(window.location.search);
@@ -658,18 +679,24 @@
                 if (!formData.coverImage) {
                     newErrors.coverImage = 'Cover image is required';
                 }
-                if (!formData.beatTitle.trim()) {
-                    newErrors.beatTitle = 'Beat title is required';
+                
+                // Validate metadata fields for YouTube uploads OR download with description
+                if (uploadMode === 'youtube' || (uploadMode === 'download' && formData.generateDescription)) {
+                    if (!formData.beatTitle.trim()) {
+                        newErrors.beatTitle = 'Beat title is required';
+                    }
+                    if (!formData.tags.trim()) {
+                        newErrors.tags = 'Type beat artists are required';
+                    }
+                    if (!formData.email.trim()) {
+                        newErrors.email = 'Email is required';
+                    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+                        newErrors.email = 'Please enter a valid email address';
+                    }
                 }
-                if (!formData.tags.trim()) {
-                    newErrors.tags = 'Type beat artists are required';
-                }
-                if (!formData.email.trim()) {
-                    newErrors.email = 'Email is required';
-                } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-                    newErrors.email = 'Please enter a valid email address';
-                }
-                if (!isYouTubeAuthenticated) {
+                
+                // YouTube auth only needed for YouTube uploads
+                if (uploadMode === 'youtube' && !isYouTubeAuthenticated) {
                     newErrors.auth = 'Please authenticate with YouTube first';
                 }
 
@@ -684,53 +711,15 @@
                     return;
                 }
 
-                // if BeatStars link exists but no manual data, show modal
-                if (formData.beatstarsLink && !manualBpmKey.bpm && !manualBpmKey.key) {
+                // Show BPM/Key modal for YouTube uploads OR download with description
+                if ((uploadMode === 'youtube' || (uploadMode === 'download' && formData.generateDescription)) 
+                    && formData.beatstarsLink && !manualBpmKey.bpm && !manualBpmKey.key) {
                     setShowBpmKeyModal(true);
                     return;
                 }
 
-                // Proceed with upload
                 await performUpload();
             };
-/*
-                if (formData.beatstarsLink && !manualBpmKey.bpm && !manualBpmKey.key) {
-                    // First try to auto-scrape, if it fails, show modal
-                    try {
-                        setProgress({ step: 'CHECKING BEATSTARS DATA...', percentage: 5 });
-                        
-                        const response = await fetch(`${API_BASE}/check-beatstars-data`, {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify({ beatstarsLink: formData.beatstarsLink }),
-                        });
-                        
-                        const result = await response.json();
-                        
-                        if (result.scrapingFailed) {
-                            setPendingSubmission(e);
-                            setProgress({ step: '', percentage: 0 });
-                            setShowBpmKeyModal(true);
-                            return;
-                        } else if (result.data) {
-                            setManualBpmKey(result.data);
-                            setPreScrapedData(result.data); // <-- NEW
-                        }
-
-                        
-                    } catch (error) {
-                        console.error('Error checking BeatStars:', error);
-                        // On error, show modal for manual input
-                        setPendingSubmission(e);
-                        setProgress({ step: '', percentage: 0 });
-                        setShowBpmKeyModal(true);
-                        return;
-                    }
-                }
-*/
-
 
             const performUpload = async () => {
                 await performUploadWithManualData();
@@ -760,19 +749,24 @@
                     formDataObj.append('beatFile', formData.beatFile);
                     formDataObj.append('coverImage', formData.coverImage);
                     formDataObj.append('beatTitle', formData.beatTitle);
-                    formDataObj.append('email', formData.email);           // ADD THIS LINE
+                    formDataObj.append('email', formData.email);
                     formDataObj.append('instagramLink', formData.instagramLink);
                     formDataObj.append('beatstarsLink', formData.beatstarsLink);
                     formDataObj.append('genre', formData.genre);
                     formDataObj.append('tags', formData.tags);
                     formDataObj.append('backgroundStyle', formData.backgroundStyle);
                     
-                    if (formData.schedulePublish && formData.scheduledDateTime) {
-                    const scheduledTime = new Date(formData.scheduledDateTime).toISOString();
-                    formDataObj.append('scheduledPublishTime', scheduledTime);
+                    // Add downloadOnly flag and generateDescription
+                    if (uploadMode === 'download') {
+                        formDataObj.append('downloadOnly', 'true');
+                        formDataObj.append('generateDescription', formData.generateDescription.toString());
+                    }
+                    
+                    if (formData.schedulePublish && formData.scheduledDateTime && uploadMode === 'youtube') {
+                        const scheduledTime = new Date(formData.scheduledDateTime).toISOString();
+                        formDataObj.append('scheduledPublishTime', scheduledTime);
                     }
 
-                    // Add manual BPM/Key if provided
                     if (dataToUse.bpm) {
                         formDataObj.append('manualBpm', dataToUse.bpm.toString());
                     }
@@ -798,7 +792,11 @@
 
                     if (result.success) {
                         setProgress({ step: 'COMPLETE!', percentage: 100 });
-                        setResult(result.result);
+                        if (result.downloadOnly) {
+                            setResult({ ...result.result, downloadOnly: true });
+                        } else {
+                            setResult(result.result);
+                        }
                     } else if (result.scrapingFailed) {
                         setIsProcessing(false);
                         setProgress({ step: '', percentage: 0 });
@@ -964,71 +962,145 @@
                 </div>
             );
 
-            const ResultDisplay = ({ result }) => (
-                <div className="success-display rounded-xl p-8">
-                    <div className="flex items-center mb-6">
-                        <div className="text-3xl text-green-400 mr-4">✓</div>
-                        <h3 className="text-2xl font-bold text-white uppercase tracking-wide">
-                            UPLOAD COMPLETE
-                        </h3>
-                    </div>
-                    
-                    <div className="space-y-6">
-                        <div>
-                            <label className="text-sm font-bold text-white/80 uppercase tracking-wide">YouTube URL:</label>
-                            <a 
-                                href={result.youtubeUrl} 
-                                target="_blank" 
-                                rel="noopener noreferrer"
-                                className="block text-indigo-300 hover:text-indigo-100 underline break-all mt-2 font-mono"
-                            >
-                                {result.youtubeUrl}
-                            </a>
-                        </div>
-                        
-                        <div>
-                            <label className="text-sm font-bold text-white/80 uppercase tracking-wide">Generated Title:</label>
-                            <div className="floating-input p-3 rounded-lg mt-2 font-mono">{result.title}</div>
-                        </div>
-                        
-                        <div>
-                            <label className="text-sm font-bold text-white/80 uppercase tracking-wide">Generated Description:</label>
-                            <pre className="floating-input p-3 rounded-lg mt-2 text-sm whitespace-pre-wrap font-mono">
-                                {result.description}
-                            </pre>
-                        </div>
-                        
-                        <div>
-                            <label className="text-sm font-bold text-white/80 uppercase tracking-wide">Generated Tags:</label>
-                            <div className="flex flex-wrap gap-2 mt-3">
-                                {result.tags && result.tags.map((tag, index) => (
-                                    <span 
-                                        key={index}
-                                        className="tag px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wide"
+            const ResultDisplay = ({ result }) => {
+                if (result.downloadOnly) {
+                    return (
+                        <div className="success-display rounded-xl p-8">
+                            <div className="flex items-center mb-6">
+                                <div className="text-3xl text-green-400 mr-4">✓</div>
+                                <h3 className="text-2xl font-bold text-white uppercase tracking-wide">
+                                    VIDEO READY
+                                </h3>
+                            </div>
+                            
+                            <div className="space-y-6">
+                                <div className="bg-black/30 rounded-xl p-4">
+                                    <label className="text-sm font-bold text-white/80 uppercase tracking-wide mb-3 block">Video Preview:</label>
+                                    <video 
+                                        controls 
+                                        className="w-full rounded-lg shadow-lg"
+                                        preload="metadata"
                                     >
-                                        {tag}
-                                    </span>
-                                ))}
+                                        <source src={result.downloadUrl} type="video/mp4" />
+                                        Your browser does not support the video tag.
+                                    </video>
+                                    <p className="text-white/60 text-xs mt-3 text-center uppercase tracking-wide">
+                                        Click play to preview • Right-click to save
+                                    </p>
+                                </div>
+                                
+                                <div className="text-center">
+                                    <a 
+                                        href={result.downloadUrl}
+                                        download={`beat-video-${result.sessionId}.mp4`}
+                                        className="inline-block auth-button text-white px-8 py-4 rounded-lg font-bold uppercase tracking-wide text-lg"
+                                    >
+                                        ⬇ DOWNLOAD VIDEO
+                                    </a>
+                                    <p className="text-white/50 text-xs mt-3 uppercase tracking-wide">
+                                        Click to download the video file
+                                    </p>
+                                </div>
+                                
+                                {result.title && (
+                                    <>
+                                        <div className="border-t border-white/10 pt-6">
+                                            <label className="text-sm font-bold text-white/80 uppercase tracking-wide">Generated Title:</label>
+                                            <div className="floating-input p-3 rounded-lg mt-2 font-mono">{result.title}</div>
+                                        </div>
+                                        
+                                        <div>
+                                            <label className="text-sm font-bold text-white/80 uppercase tracking-wide">Generated Description:</label>
+                                            <pre className="floating-input p-3 rounded-lg mt-2 text-sm whitespace-pre-wrap font-mono max-h-48 overflow-y-auto">
+                                                {result.description}
+                                            </pre>
+                                        </div>
+                                        
+                                        <div>
+                                            <label className="text-sm font-bold text-white/80 uppercase tracking-wide">Generated Tags:</label>
+                                            <div className="flex flex-wrap gap-2 mt-3">
+                                                {result.tags && result.tags.map((tag, index) => (
+                                                    <span 
+                                                        key={index}
+                                                        className="tag px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wide"
+                                                    >
+                                                        {tag}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
                             </div>
                         </div>
+                    );
+                }
+
+                return (
+                    <div className="success-display rounded-xl p-8">
+                        <div className="flex items-center mb-6">
+                            <div className="text-3xl text-green-400 mr-4">✓</div>
+                            <h3 className="text-2xl font-bold text-white uppercase tracking-wide">
+                                UPLOAD COMPLETE
+                            </h3>
+                        </div>
                         
-                        <div className="pt-4">
-                            <a 
-                                href={result.youtubeUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="auth-button text-white px-8 py-4 rounded-lg font-bold uppercase tracking-wide inline-block"
-                            >
-                                VIEW ON YOUTUBE
-                            </a>
+                        <div className="space-y-6">
+                            <div>
+                                <label className="text-sm font-bold text-white/80 uppercase tracking-wide">YouTube URL:</label>
+                                <a 
+                                    href={result.youtubeUrl} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    className="block text-indigo-300 hover:text-indigo-100 underline break-all mt-2 font-mono"
+                                >
+                                    {result.youtubeUrl}
+                                </a>
+                            </div>
+                            
+                            <div>
+                                <label className="text-sm font-bold text-white/80 uppercase tracking-wide">Generated Title:</label>
+                                <div className="floating-input p-3 rounded-lg mt-2 font-mono">{result.title}</div>
+                            </div>
+                            
+                            <div>
+                                <label className="text-sm font-bold text-white/80 uppercase tracking-wide">Generated Description:</label>
+                                <pre className="floating-input p-3 rounded-lg mt-2 text-sm whitespace-pre-wrap font-mono">
+                                    {result.description}
+                                </pre>
+                            </div>
+                            
+                            <div>
+                                <label className="text-sm font-bold text-white/80 uppercase tracking-wide">Generated Tags:</label>
+                                <div className="flex flex-wrap gap-2 mt-3">
+                                    {result.tags && result.tags.map((tag, index) => (
+                                        <span 
+                                            key={index}
+                                            className="tag px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wide"
+                                        >
+                                            {tag}
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+                            
+                            <div className="pt-4">
+                                <a 
+                                    href={result.youtubeUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="auth-button text-white px-8 py-4 rounded-lg font-bold uppercase tracking-wide inline-block"
+                                >
+                                    VIEW ON YOUTUBE
+                                </a>
+                            </div>
                         </div>
                     </div>
-                </div>
-            );
+                );
+            };
 
             return (
                 <div className="min-h-screen relative">
-                    {/* Credit Button */}
                     <a 
                         href="https://linktr.ee/1mains" 
                         target="_blank" 
@@ -1043,8 +1115,6 @@
                         <span className="credit-text">fw 1mains</span>
                     </a>
                    
-                   
-                    {/* Mute Toggle Button */}
                     <button
                         id="mute-toggle"
                         className="credit-button"
@@ -1071,7 +1141,34 @@
 
                         <div className="scrollable-content">
                             <div className="max-w-4xl mx-auto">
-                                <YouTubeAuthSection />
+                                <div className="mb-8">
+                                    <label className="block text-sm font-semibold text-white mb-3 uppercase tracking-wide">
+                                        What would you like to do?
+                                    </label>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <button
+                                            type="button"
+                                            onClick={() => setUploadMode('youtube')}
+                                            className={`option-button ${uploadMode === 'youtube' ? 'selected' : ''} rounded-xl p-6 text-white`}
+                                        >
+                                            <div className="text-3xl mb-2">📺</div>
+                                            <div className="font-bold uppercase tracking-wide">Upload to YouTube</div>
+                                            <div className="text-xs text-white/70 mt-2">Generate & post directly</div>
+                                        </button>
+                                        
+                                        <button
+                                            type="button"
+                                            onClick={() => setUploadMode('download')}
+                                            className={`option-button ${uploadMode === 'download' ? 'selected' : ''} rounded-xl p-6 text-white`}
+                                        >
+                                            <div className="text-3xl mb-2">💾</div>
+                                            <div className="font-bold uppercase tracking-wide">Download Only</div>
+                                            <div className="text-xs text-white/70 mt-2">Get the video file</div>
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                {uploadMode === 'youtube' && <YouTubeAuthSection />}
 
                                 <div className="floating-form rounded-2xl p-8">
                                     {!isProcessing && !result && (
@@ -1096,20 +1193,41 @@
                                                 />
                                             </div>
                                             
-                                            <div>
-                                            <label className="block text-sm font-semibold text-white mb-3 uppercase tracking-wide">
-                                                Background Style
-                                            </label>
-                                            <select
-                                                value={formData.backgroundStyle}
-                                                onChange={(e) => handleInputChange('backgroundStyle', e.target.value)}
-                                                className="floating-input w-full px-4 py-3 rounded-xl font-mono"
-                                            >
-                                                <option value="blurred">Blurred</option>
-                                                <option value="black">Black</option>
-                                            </select>
+                                            <div className="mb-6">
+                                                <label className="block text-sm font-semibold text-white mb-3 uppercase tracking-wide">
+                                                    Background Style
+                                                </label>
+                                                <select
+                                                    value={formData.backgroundStyle}
+                                                    onChange={(e) => handleInputChange('backgroundStyle', e.target.value)}
+                                                    className="floating-input w-full px-4 py-3 rounded-xl font-mono"
+                                                >
+                                                    <option value="blurred">Blurred</option>
+                                                    <option value="black">Black</option>
+                                                </select>
                                             </div>
                                             
+                                            {uploadMode === 'download' && (
+                                                <div className="mb-6">
+                                                    <label className="flex items-center text-white">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={formData.generateDescription}
+                                                            onChange={(e) => handleInputChange('generateDescription', e.target.checked)}
+                                                            className="mr-3 w-5 h-5"
+                                                        />
+                                                        <span className="font-semibold uppercase tracking-wide">
+                                                            Generate title & description
+                                                        </span>
+                                                    </label>
+                                                    <p className="text-white/50 text-xs mt-2 ml-8 uppercase tracking-wide">
+                                                        Create YouTube metadata for your video (requires beat info)
+                                                    </p>
+                                                </div>
+                                            )}
+                                            
+                                            {(uploadMode === 'youtube' || (uploadMode === 'download' && formData.generateDescription)) && (
+                                                <>
                                             <div className="grid lg:grid-cols-2 gap-6 mb-6">
                                                 <div>
                                                     <label className="block text-sm font-semibold text-white mb-3 uppercase tracking-wide">
@@ -1195,7 +1313,6 @@
                                                 </div>
                                             </div>
 
-                                            {/* Manual BPM/Key Display */}
                                             {(manualBpmKey.bpm || manualBpmKey.key) && (
                                                 <div className="mb-6 success-display rounded-xl p-4">
                                                     <div className="flex items-center justify-between">
@@ -1226,37 +1343,43 @@
                                                     </div>
                                                 </div>
                                             )}
-                                            <div className="mb-6">
-                                            <label className="flex items-center text-white mb-3">
-                                                <input
-                                                type="checkbox"
-                                                checked={formData.schedulePublish}
-                                                onChange={(e) => handleInputChange('schedulePublish', e.target.checked)}
-                                                className="mr-3 w-5 h-5"
-                                                />
-                                                <span className="font-semibold uppercase tracking-wide">
-                                                Schedule for later
-                                                </span>
-                                            </label>
                                             
-                                            {formData.schedulePublish && (
-                                                <div className="mt-3">
-                                                <label className="block text-sm font-semibold text-white mb-2 uppercase tracking-wide">
-                                                    Publish Date & Time
-                                                </label>
-                                                <input
-                                                    type="datetime-local"
-                                                    value={formData.scheduledDateTime}
-                                                    onChange={(e) => handleInputChange('scheduledDateTime', e.target.value)}
-                                                    min={new Date().toISOString().slice(0, 16)}
-                                                    className="floating-input w-full px-4 py-3 rounded-xl font-mono"
-                                                />
-                                                <p className="text-white/50 text-xs mt-2 uppercase tracking-wide">
-                                                    Video will be private until scheduled time
-                                                </p>
+                                            {uploadMode === 'youtube' && (
+                                                <div className="mb-6">
+                                                    <label className="flex items-center text-white mb-3">
+                                                        <input
+                                                        type="checkbox"
+                                                        checked={formData.schedulePublish}
+                                                        onChange={(e) => handleInputChange('schedulePublish', e.target.checked)}
+                                                        className="mr-3 w-5 h-5"
+                                                        />
+                                                        <span className="font-semibold uppercase tracking-wide">
+                                                        Schedule for later
+                                                        </span>
+                                                    </label>
+                                                    
+                                                    {formData.schedulePublish && (
+                                                        <div className="mt-3">
+                                                        <label className="block text-sm font-semibold text-white mb-2 uppercase tracking-wide">
+                                                            Publish Date & Time
+                                                        </label>
+                                                        <input
+                                                            type="datetime-local"
+                                                            value={formData.scheduledDateTime}
+                                                            onChange={(e) => handleInputChange('scheduledDateTime', e.target.value)}
+                                                            min={new Date().toISOString().slice(0, 16)}
+                                                            className="floating-input w-full px-4 py-3 rounded-xl font-mono"
+                                                        />
+                                                        <p className="text-white/50 text-xs mt-2 uppercase tracking-wide">
+                                                            Video will be private until scheduled time
+                                                        </p>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             )}
-                                            </div>
+                                            </>
+                                            )}
+                                            
                                             {errors.submit && (
                                                 <div className="mb-6 p-4 error-display rounded-lg">
                                                     <p className="font-medium">{errors.submit}</p>
@@ -1265,10 +1388,11 @@
 
                                             <button
                                                 type="submit"
-                                                disabled={!isYouTubeAuthenticated}
+                                                disabled={uploadMode === 'youtube' && !isYouTubeAuthenticated}
                                                 className="submit-button w-full py-4 px-8 rounded-xl font-bold text-white uppercase tracking-wider text-lg"
                                             >
-                                                {isYouTubeAuthenticated ? 'GENERATE & UPLOAD' : 'AUTHENTICATE FIRST'}
+                                                {uploadMode === 'download' ? 'GENERATE VIDEO' : 
+                                                 isYouTubeAuthenticated ? 'GENERATE & UPLOAD' : 'AUTHENTICATE FIRST'}
                                             </button>
                                         </form>
                                     )}
@@ -1301,7 +1425,10 @@
                                                         instagramLink: '',
                                                         beatstarsLink: '',
                                                         genre: 'hip-hop',
-                                                        backgroundStyle: 'blurred'
+                                                        backgroundStyle: 'blurred',
+                                                        schedulePublish: false,
+                                                        scheduledDateTime: '',
+                                                        generateDescription: false
                                                     });
                                                     setManualBpmKey({ bpm: null, key: null });
                                                     setProgress({ step: '', percentage: 0 });
@@ -1309,7 +1436,7 @@
                                                 }}
                                                 className="w-full mt-8 bg-gray-600/50 backdrop-blur-10 text-white py-4 px-8 rounded-xl font-bold hover:bg-gray-500/60 transition-all duration-300 uppercase tracking-wide"
                                             >
-                                                UPLOAD ANOTHER BEAT
+                                                {uploadMode === 'download' ? 'CREATE ANOTHER VIDEO' : 'UPLOAD ANOTHER BEAT'}
                                             </button>
                                         </>
                                     )}
@@ -1323,7 +1450,6 @@
 
         const LandingPage = ({ onStart, onAbout }) => (
             <div className="h-screen flex flex-col items-center justify-center text-center text-white px-6 relative">
-                {/* About link in top right */}
                 <button
                     onClick={onAbout}
                     className="absolute top-8 right-8 text-white/70 hover:text-white transition-colors duration-300 text-lg underline"
@@ -1346,7 +1472,6 @@
             </div>
         );
 
-        // abt us
         const AboutPage = ({ onBack }) => (
             <div className="min-h-screen relative">
                 <a 
@@ -1464,7 +1589,6 @@
             </div>
         );
 
-        // hash-based router
         const useHistoryRouter = () => {
             const [route, setRoute] = React.useState(window.location.pathname || '/');
 
@@ -1482,13 +1606,10 @@
             return { route, navigate };
         };
 
-
-
         const App = () => {
             const [started, setStarted] = React.useState(false);
             const { route, navigate } = useHistoryRouter();
 
-            // routing
             if (route === '/about') {
                 return <AboutPage onBack={() => navigate('/')} />;
             }
@@ -1501,7 +1622,6 @@
         };
 
         ReactDOM.render(<App />, document.getElementById('root'));
-        // ReactDOM.render(<BeatUploaderApp />, document.getElementById('root'));
 
     </script>
     <script>
@@ -1515,24 +1635,18 @@
             "background_videos/tana - kount bana.mp4",
             "background_videos/tana - prolly.mp4",
             "background_videos/nettspend - 2024 freestyle.mp4"
-
         ];
 
-
-        // random video
         const randomVideo = videos[Math.floor(Math.random() * videos.length)];
 
-        // set source
         const videoElement = document.getElementById("background-video");
         const sourceElement = videoElement.querySelector("source");
         sourceElement.src = randomVideo;
         videoElement.load();
         videoElement.play();
-        });
-
-
-</script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/framer-motion/10.18.0/framer-motion.umd.min.js"></script>
+    });
+    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/framer-motion/10.18.0/framer-motion.umd.min.js"></script>
 
 </body>
 </html>

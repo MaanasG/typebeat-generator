@@ -183,17 +183,64 @@ app.listen(PORT, () => {
   console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
 });
 
+app.get('/api/download-video/:sessionId', (req, res) => {
+  const { sessionId } = req.params;
+  const videoPath = path.join(videosDir, `video-${sessionId}.mp4`);
+  
+  if (!fs.existsSync(videoPath)) {
+    return res.status(404).json({ success: false, error: 'Video not found' });
+  }
+  
+  res.download(videoPath, `beat-video-${sessionId}.mp4`, (err) => {
+    if (err) {
+      console.error('Download error:', err);
+      if (!res.headersSent) {
+        res.status(500).json({ success: false, error: 'Download failed' });
+      }
+    }
+  });
+});
+
+app.post('/api/cleanup-video/:sessionId', async (req, res) => {
+  const { sessionId } = req.params;
+  const videoPath = path.join(videosDir, `video-${sessionId}.mp4`);
+  
+  try {
+    if (fs.existsSync(videoPath)) {
+      await fs.promises.unlink(videoPath);
+      console.log(`Cleaned up video: ${videoPath}`);
+    }
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Cleanup error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 async function handleUpload(req, res) {
   let cleanupFiles = [];
   try {
-    const { beatTitle, tags, email, instagramLink, beatstarsLink, genre, manualBpm, manualKey, backgroundStyle, scheduledPublishTime   } = req.body;
+    const { 
+      beatTitle, 
+      tags, 
+      email, 
+      instagramLink, 
+      beatstarsLink, 
+      genre, 
+      manualBpm, 
+      manualKey, 
+      backgroundStyle, 
+      scheduledPublishTime,
+      downloadOnly 
+    } = req.body;
 
     const beatFile = req.files['beatFile'][0];
     const coverImage = req.files['coverImage'][0];
-    cleanupFiles.push(beatFile.path, coverImage.path); // input file tracking
+    cleanupFiles.push(beatFile.path, coverImage.path);
 
     const sessionId = uuidv4();
-    console.log(`Starting upload process for session: ${sessionId}`);
+    console.log(`Starting ${downloadOnly === 'true' ? 'download' : 'upload'} process for session: ${sessionId}`);
+
 
     // bpm/key resolution
     let bpm = manualBpm?.trim() ? parseInt(manualBpm.trim(), 10) : null;
@@ -236,7 +283,7 @@ async function handleUpload(req, res) {
       sessionId,
       backgroundStyle
     });
-    cleanupFiles.push(...tempFiles, videoPath);
+    cleanupFiles.push(...tempFiles);
 
     const metadata = await metadataGenerator.generateMetadata({
       beatTitle,
@@ -249,7 +296,27 @@ async function handleUpload(req, res) {
       manualKey: key
     });
 
-    // Upload to YouTube
+    // If download only, skip YouTube upload
+    if (downloadOnly === 'true') {
+      // Clean up input files but keep the video
+      await deleteFiles([beatFile.path, coverImage.path, ...tempFiles]);
+      
+      res.json({
+        success: true,
+        sessionId,
+        downloadOnly: true,
+        result: {
+          sessionId,
+          title: metadata.title,
+          description: metadata.description,
+          tags: metadata.tags,
+          downloadUrl: `/api/download-video/${sessionId}`
+        }
+      });
+      return;
+    }
+
+    // Upload to YouTube (existing code)
     const uploadResult = await youtubeUploader.uploadVideo({
       videoPath,
       title: metadata.title,
@@ -259,9 +326,8 @@ async function handleUpload(req, res) {
       scheduledPublishTime: scheduledPublishTime || null 
     });
 
-
     // Clean up everything after successful upload
-    await deleteFiles(cleanupFiles);
+    await deleteFiles(cleanupFiles.concat(videoPath));
 
     res.json({
       success: true,
